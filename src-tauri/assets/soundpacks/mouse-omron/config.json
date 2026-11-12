@@ -1,0 +1,24 @@
+{
+  "config_version": "2",
+  "id": "mouse-omron",
+  "name": "Omron Microswitch",
+  "description": "Klasik oyuncu faresi mikro anahtar tıklaması",
+  "tag": "Mouse Crisp",
+  "accent": "#22d3ee",
+  "device_type": "mouse",
+  "author": "sxmcaps",
+  "definitions": {
+    "MouseLeft": {
+      "down": "left_down.wav",
+      "up": "left_up.wav"
+    },
+    "MouseRight": {
+      "down": "right_down.wav",
+      "up": "right_up.wav"
+    },
+    "MouseMiddle": {
+      "down": "middle_down.wav",
+      "up": "middle_up.wav"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "config_version": "2",
+  "id": "mouse-silent",
+  "name": "Kailh Silent Mouse",
+  "description": "Yumuşak ve tok sessiz fare tıklaması",
+  "tag": "Mouse Silent",
+  "accent": "#818cf8",
+  "device_type": "mouse",
+  "author": "sxmcaps",
+  "definitions": {
+    "MouseLeft": {
+      "down": "left_down.wav",
+      "up": "left_up.wav"
+    },
+    "MouseRight": {
+      "down": "right_down.wav",
+      "up": "right_up.wav"
+    },
+    "MouseMiddle": {
+      "down": "middle_down.wav",
+      "up": "middle_up.wav"
+    }
+  }
+}

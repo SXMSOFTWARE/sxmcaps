@@ -1,0 +1,92 @@
+{
+  "config_version": "2",
+  "id": "holy-panda",
+  "name": "Holy Panda",
+  "description": "Uzun gövdeli POM ses, dolgun ve tok tactile 'thock'",
+  "tag": "Thocky",
+  "accent": "#fb923c",
+  "device_type": "keyboard",
+  "author": "sxmcaps",
+  "sxmcaps_variants": {
+    "normal_down": [
+      "normal_down_0.wav",
+      "normal_down_1.wav",
+      "normal_down_2.wav",
+      "normal_down_3.wav"
+    ],
+    "normal_up": [
+      "normal_up_0.wav",
+      "normal_up_1.wav",
+      "normal_up_2.wav"
+    ],
+    "space_down": [
+      "space_down_0.wav",
+      "space_down_1.wav"
+    ],
+    "space_up": [
+      "space_up_0.wav"
+    ],
+    "enter_down": [
+      "enter_down_0.wav"
+    ],
+    "enter_up": [
+      "enter_up_0.wav"
+    ],
+    "mod_down": [
+      "mod_down_0.wav"
+    ],
+    "mod_up": [
+      "mod_up_0.wav"
+    ]
+  },
+  "definitions": {
+    "Default": {
+      "down": "normal_down_0.wav",
+      "up": "normal_up_0.wav"
+    },
+    "Space": {
+      "down": "space_down_0.wav",
+      "up": "space_up_0.wav"
+    },
+    "Enter": {
+      "down": "enter_down_0.wav",
+      "up": "enter_up_0.wav"
+    },
+    "Backspace": {
+      "down": "enter_down_0.wav",
+      "up": "enter_up_0.wav"
+    },
+    "ShiftLeft": {
+      "down": "mod_down_0.wav",
+      "up": "mod_up_0.wav"
+    },
+    "ShiftRight": {
+      "down": "mod_down_0.wav",
+      "up": "mod_up_0.wav"
+    },
+    "Tab": {
+      "down": "mod_down_0.wav",
+      "up": "mod_up_0.wav"
+    },
+    "CapsLock": {
+      "down": "mod_down_0.wav",
+      "up": "mod_up_0.wav"
+    },
+    "ControlLeft": {
+      "down": "mod_down_0.wav",
+      "up": "mod_up_0.wav"
+    },
+    "ControlRight": {
+      "down": "mod_down_0.wav",
+      "up": "mod_up_0.wav"
+    },
+    "AltLeft": {
+      "down": "mod_down_0.wav",
+      "up": "mod_up_0.wav"
+    },
+    "AltRight": {
+      "down": "mod_down_0.wav",
+      "up": "mod_up_0.wav"
+    }
+  }
+}
