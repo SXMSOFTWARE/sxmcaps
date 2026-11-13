@@ -2,7 +2,12 @@
 
 Monochrome desktop peripheral & acoustic suite combining hardware-aware HID control (**SxBoards**), a 24-effect procedural lighting compositor (**SxLighting**), opt-in kernel-level input transforms (**SxPerformance**), and real-time mechanical switch / mouse sound synthesis (`Rust`, `Tauri v2`, `hidapi`, `CPAL/Rodio`, `evdev` / Win32 / `CGEventTap`).
 
-## What's New in `v0.4.0`
+## What's New in `v0.4.1`
+
+- **SxLighting Hardware Streaming Fix (`AULA F75`)**: Added `prepare_realtime_stream()` switching wired AULA F75 firmware into Per-Key Custom mode (`block[9]=0x01`, `block[10]=0x15`, `block[59]=0x47`, `400ms` settle wait), cached stream HID handle for zero-starvation frame delivery, automatic keyboard fallback target resolution, and defaulted Hardware Stream (`LED'lere Aktar`) ON when launching the compositor.
+- **Native Furylevel Z1 Mouse Driver (`04f3:026e` Wired / `04f3:026f` 2.4G / `04f3:026d` 4K)**: Full HID protocol support (`0xBC` wake, `0x05` status/battery, `0xBD` flash state, `0x04` live input events, and `0x01..0x0F` config commands) with PAW3395 DPI stages (`50–26,000`), Polling Rate (`125–4000 Hz`), `1/2 mm` LOD, Debounce (`0–30 ms`), Angle Snap, Motion Sync, Ripple Control, Sleep & LED modes, and 6-button remapping.
+
+## Previous Highlights (`v0.4.0`)
 
 - **Monochrome Black & White Bento Studio UI**: Redesigned **`SxmCaps`** dashboard featuring a `#050506` obsidian canvas, `#111114` hairline Bento cards, white pill active controls, unified `Overview` Control Hub, and truthful hardware classification (`Keyboard`, `Mouse`, `Headset`).
 - **Live FN Hardware Sync (`AULA F75`)**: Polls USB/2.4G firmware state via `spawn_hardware_watcher` (`sxmcaps://hardware-state`) so physical `FN` key combinations and rotary knob adjustments update the UI in real time.

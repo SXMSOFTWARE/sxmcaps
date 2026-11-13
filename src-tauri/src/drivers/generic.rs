@@ -1,4 +1,5 @@
 use super::aula::f75::{BT_PID, DONGLE_PID, WIRED_PID, WIRED_VID, WIRELESS_VID};
+use super::furylevel::z1::is_furylevel_z1_device;
 use super::{
     ConnectionLink, DeviceCapabilities, DeviceHardwareState, DeviceKind, HardwareDeviceInfo,
     KeymapEntryDto, LedTopologyNode, LightingCapability, PeripheralDriver,
@@ -98,9 +99,10 @@ pub fn discover_generic_devices(api: &HidApi) -> Vec<HardwareDeviceInfo> {
     for d in api.device_list() {
         let vid = d.vendor_id();
         let pid = d.product_id();
-        // Skip AULA F75 devices handled by dedicated AulaF75Driver
+        // Skip AULA F75 & Furylevel Z1 devices handled by dedicated native drivers
         if (vid == WIRED_VID && pid == WIRED_PID)
             || (vid == WIRELESS_VID && (pid == DONGLE_PID || pid == BT_PID))
+            || is_furylevel_z1_device(vid, pid)
         {
             continue;
         }

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 
 interface SxLightingStudioPanelProps {
+  devices?: HardwareDeviceInfo[];
   selectedDevice: HardwareDeviceInfo | null;
   hwState: DeviceHardwareState | null;
   pressedKeys: Set<string>;
@@ -93,6 +94,7 @@ const SWATCHES: [number, number, number][][] = [
 ];
 
 export const SxLightingStudioPanel: React.FC<SxLightingStudioPanelProps> = ({
+  devices = [],
   selectedDevice,
   hwState,
   pressedKeys,
@@ -114,9 +116,19 @@ export const SxLightingStudioPanel: React.FC<SxLightingStudioPanelProps> = ({
   const { t } = useI18n();
   const [subTab, setSubTab] = useState<'compositor' | 'firmware'>('compositor');
   const [draft, setDraft] = useState<SxLightingPreset>(sxLightingStatus.active_preset);
-  const [streamHw, setStreamHw] = useState(
-    Boolean(selectedDevice?.capabilities.host_streaming && sxLightingStatus.hardware_streaming)
+  // Auto-resolve to selectedDevice if it supports host streaming, else fall back to any connected host-streamable board.
+  const streamingTarget =
+    (selectedDevice?.capabilities.host_streaming && selectedDevice.online && selectedDevice.permission_ok
+      ? selectedDevice
+      : devices.find((d) => d.capabilities.host_streaming && d.online && d.permission_ok)) ||
+    selectedDevice;
+  const canStreamHw = Boolean(
+    streamingTarget?.capabilities.host_streaming &&
+      streamingTarget.online &&
+      streamingTarget.permission_ok
   );
+  // Default Hardware Streaming to ON so starting SxLighting immediately drives physical keyboard LEDs.
+  const [streamHw, setStreamHw] = useState(true);
   const [selectedLayerId, setSelectedLayerId] = useState<string>(
     sxLightingStatus.active_preset.layers[0]?.id || ''
   );
@@ -131,10 +143,6 @@ export const SxLightingStudioPanel: React.FC<SxLightingStudioPanelProps> = ({
       );
     }
   }, [sxLightingStatus.active_preset]);
-
-  const canStreamHw = Boolean(
-    selectedDevice?.capabilities.host_streaming && selectedDevice.online && selectedDevice.permission_ok
-  );
 
   const selectedLayer =
     draft.layers.find((l) => l.id === selectedLayerId) || draft.layers[0] || null;
@@ -410,6 +418,16 @@ export const SxLightingStudioPanel: React.FC<SxLightingStudioPanelProps> = ({
               {!canStreamHw && (
                 <p className="text-[10px] leading-snug text-zinc-500">
                   {t.sxlighting.hwStreamUnavailable}
+                </p>
+              )}
+              {canStreamHw && streamingTarget && (
+                <p className="text-[10px] leading-snug text-emerald-400/90">
+                  → {streamingTarget.display_name} ({sxLightingStatus.hardware_streaming ? 'LIVE' : 'READY'})
+                </p>
+              )}
+              {sxLightingStatus.last_error && (
+                <p className="rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-1.5 text-[10px] leading-snug text-amber-200">
+                  {sxLightingStatus.last_error}
                 </p>
               )}
             </div>

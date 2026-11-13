@@ -232,17 +232,19 @@ export const SxBoardDevicesPanel: React.FC<SxBoardDevicesPanelProps> = ({
                   <div className="flex gap-1.5">
                     {dev.capabilities.communication_supported ? (
                       <>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectDevice(dev.id);
-                            onOpenBoardStudio('rgb');
-                          }}
-                          className="cursor-pointer rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white hover:bg-white/15"
-                        >
-                          {t.nav.rgb}
-                        </button>
+                        {dev.device_kind === 'keyboard' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectDevice(dev.id);
+                              onOpenBoardStudio('rgb');
+                            }}
+                            className="cursor-pointer rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white hover:bg-white/15"
+                          >
+                            {t.nav.rgb}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={(e) => {

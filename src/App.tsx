@@ -12,6 +12,8 @@ import {
   InputStatus,
   KeymapEntryDto,
   LightingPreviewFrame,
+  MouseConfigUpdate,
+  MouseHardwareState,
   RemapTargetDto,
   SoundpackInfo,
   StatsData,
@@ -32,6 +34,7 @@ import { SxmOverviewDashboard } from './components/SxmOverviewDashboard';
 import { SxLightingStudioPanel } from './components/SxLightingStudioPanel';
 import { SxPerformancePanel } from './components/SxPerformancePanel';
 import { DeviceSpecificNoticeCard } from './components/DeviceSpecificNoticeCard';
+import { FurylevelZ1Panel } from './components/FurylevelZ1Panel';
 import { SxBoardDevicesPanel } from './components/SxBoardDevicesPanel';
 import { SxBoardKeysPanel } from './components/SxBoardKeysPanel';
 import { SxBoardMacrosPanel } from './components/SxBoardMacrosPanel';
@@ -224,7 +227,7 @@ export function App() {
     null
   );
   const [soundpacksDir, setSoundpacksDir] = useState('');
-  const [appVersion, setAppVersion] = useState('v0.4.0');
+  const [appVersion, setAppVersion] = useState('v0.4.1');
   const [inputStatus, setInputStatus] = useState<InputStatus>({
     has_permission: true,
     active_devices: [],
@@ -237,6 +240,7 @@ export function App() {
   const [devices, setDevices] = useState<HardwareDeviceInfo[]>([]);
   const [activeDeviceId, setActiveDeviceId] = useState<string>('');
   const [hwState, setHwState] = useState<DeviceHardwareState | null>(null);
+  const [mouseState, setMouseState] = useState<MouseHardwareState | null>(null);
   const [hwBusy, setHwBusy] = useState(false);
   const [scanningHw, setScanningHw] = useState(false);
 
@@ -313,13 +317,31 @@ export function App() {
   const fetchDeviceHwState = useCallback(
     async (devId: string, devObj?: HardwareDeviceInfo | null) => {
       const dev = devObj ?? devices.find((d) => d.id === devId);
-      if (
-        !devId ||
-        !dev ||
-        !dev.online ||
-        !dev.permission_ok ||
-        (!dev.capabilities.rgb_effects && !dev.capabilities.key_remapping)
-      ) {
+      if (!devId || !dev || !dev.online || !dev.permission_ok) {
+        setHwState(null);
+        setMouseState(null);
+        return;
+      }
+
+      if (dev.driver_id === 'furylevel-z1') {
+        setHwState(null);
+        setHwBusy(true);
+        try {
+          const mst = await invoke<MouseHardwareState | null>(
+            'get_mouse_hardware_state',
+            { deviceId: devId }
+          );
+          setMouseState(mst);
+        } catch (err) {
+          showToast(normalizeError(err), true);
+        } finally {
+          setHwBusy(false);
+        }
+        return;
+      }
+
+      setMouseState(null);
+      if (!dev.capabilities.rgb_effects && !dev.capabilities.key_remapping) {
         setHwState(null);
         return;
       }
@@ -412,7 +434,7 @@ export function App() {
           bestDev &&
           bestDev.online &&
           bestDev.permission_ok &&
-          bestDev.capabilities.rgb_effects
+          (bestDev.capabilities.rgb_effects || bestDev.driver_id === 'furylevel-z1')
         ) {
           fetchDeviceHwState(bestId, bestDev);
         }
@@ -498,6 +520,13 @@ export function App() {
       }
     );
 
+    const unlistenMouseState = listen<MouseHardwareState>(
+      'sxmcaps://mouse-state',
+      (event) => {
+        setMouseState(event.payload);
+      }
+    );
+
     const unlistenLightFrame = listen<LightingPreviewFrame>(
       'sxmcaps://lighting-frame',
       (event) => {
@@ -510,6 +539,7 @@ export function App() {
       unlistenSettings.then((fn) => fn());
       unlistenWin.then((fn) => fn());
       unlistenHwState.then((fn) => fn());
+      unlistenMouseState.then((fn) => fn());
       unlistenLightFrame.then((fn) => fn());
     };
   }, [recordWpmTick]);
@@ -730,6 +760,40 @@ export function App() {
       });
       setHwState(st);
       setSxLightingStatus((prev) => ({ ...prev, active: false, hardware_streaming: false }));
+    } catch (err) {
+      showToast(normalizeError(err), true);
+    } finally {
+      setHwBusy(false);
+    }
+  };
+
+  // --- Furylevel Z1 Mouse Driver Handlers ---
+  const handleApplyMouseConfig = async (patch: MouseConfigUpdate) => {
+    if (!activeDeviceId) return;
+    setHwBusy(true);
+    try {
+      const next = await invoke<MouseHardwareState | null>(
+        'apply_mouse_hardware_settings',
+        { deviceId: activeDeviceId, config: patch }
+      );
+      if (next) setMouseState(next);
+    } catch (err) {
+      showToast(normalizeError(err), true);
+    } finally {
+      setHwBusy(false);
+    }
+  };
+
+  const handleFactoryResetMouse = async () => {
+    if (!activeDeviceId) return;
+    setHwBusy(true);
+    try {
+      const next = await invoke<MouseHardwareState | null>(
+        'factory_reset_mouse_hardware',
+        { deviceId: activeDeviceId }
+      );
+      if (next) setMouseState(next);
+      showToast(t.mouseDriver.factoryResetOk);
     } catch (err) {
       showToast(normalizeError(err), true);
     } finally {
@@ -1571,20 +1635,34 @@ export function App() {
             )}
 
             {section === 'devices' && (
-              <SxBoardDevicesPanel
-                devices={devices}
-                activeDeviceId={activeDeviceId}
-                scanning={scanningHw}
-                onSelectDevice={handleSelectDevice}
-                onRescan={handleRescanHardware}
-                onInstallPermissions={handleEnableUdev}
-                onOpenBoardStudio={handleSmartNavigate}
-              />
+              <div className="space-y-4">
+                <SxBoardDevicesPanel
+                  devices={devices}
+                  activeDeviceId={activeDeviceId}
+                  scanning={scanningHw}
+                  onSelectDevice={handleSelectDevice}
+                  onRescan={handleRescanHardware}
+                  onInstallPermissions={handleEnableUdev}
+                  onOpenBoardStudio={handleSmartNavigate}
+                />
+                {activeDevice?.driver_id === 'furylevel-z1' && (
+                  <FurylevelZ1Panel
+                    device={activeDevice}
+                    mouseState={mouseState}
+                    busy={hwBusy}
+                    onRefresh={() => fetchDeviceHwState(activeDevice.id, activeDevice)}
+                    onApplyConfig={handleApplyMouseConfig}
+                    onFactoryReset={handleFactoryResetMouse}
+                    onInstallPermissions={handleEnableUdev}
+                  />
+                )}
+              </div>
             )}
 
             {section === 'rgb' && (
               <SxLightingStudioPanel
                 selectedDevice={activeDevice}
+                devices={devices}
                 hwState={hwState}
                 pressedKeys={pressedKeys}
                 sxLightingStatus={sxLightingStatus}
@@ -1614,23 +1692,34 @@ export function App() {
               />
             )}
 
-            {section === 'keys' && (
-              <SxBoardKeysPanel
-                device={activeDevice}
-                keymapLayer0={keymapLayer0}
-                keymapLayer1={keymapLayer1}
-                activeLayer={activeLayer}
-                pressedKeys={pressedKeys}
-                targets={remapTargets}
-                loading={hwBusy}
-                onChangeLayer={setActiveLayer}
-                onWriteEntry={handleWriteKeymapEntry}
-                onRestoreLayer0={handleRestoreLayer0}
-                onRefreshKeymap={(layer) =>
-                  fetchDeviceKeymaps(activeDeviceId, layer)
-                }
-              />
-            )}
+            {section === 'keys' &&
+              (activeDevice?.driver_id === 'furylevel-z1' ? (
+                <FurylevelZ1Panel
+                  device={activeDevice}
+                  mouseState={mouseState}
+                  busy={hwBusy}
+                  onRefresh={() => fetchDeviceHwState(activeDevice.id, activeDevice)}
+                  onApplyConfig={handleApplyMouseConfig}
+                  onFactoryReset={handleFactoryResetMouse}
+                  onInstallPermissions={handleEnableUdev}
+                />
+              ) : (
+                <SxBoardKeysPanel
+                  device={activeDevice}
+                  keymapLayer0={keymapLayer0}
+                  keymapLayer1={keymapLayer1}
+                  activeLayer={activeLayer}
+                  pressedKeys={pressedKeys}
+                  targets={remapTargets}
+                  loading={hwBusy}
+                  onChangeLayer={setActiveLayer}
+                  onWriteEntry={handleWriteKeymapEntry}
+                  onRestoreLayer0={handleRestoreLayer0}
+                  onRefreshKeymap={(layer) =>
+                    fetchDeviceKeymaps(activeDeviceId, layer)
+                  }
+                />
+              ))}
 
             {section === 'macros' && (
               <SxBoardMacrosPanel

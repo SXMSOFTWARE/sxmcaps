@@ -201,6 +201,64 @@ export interface RemapTargetDto {
   category: string;
 }
 
+export interface MouseButtonActionOption {
+  id: string;
+  label_en: string;
+  label_tr: string;
+}
+
+export interface MouseHardwareState {
+  device_id: string;
+  model_name: string;
+  sensor_model: string;
+  mcu_model: string;
+  firmware_version: string;
+  link_label: string;
+  online: boolean;
+  battery_pct: number;
+  is_charging: boolean;
+  voltage_mv: number;
+  polling_rate: number;
+  max_polling_rate: number;
+  lod_mm: number;
+  debounce_ms: number;
+  active_stage: number;
+  stage_count: number;
+  stage_enable_mask: number;
+  dpi_stages: number[];
+  dpi_colors: [number, number, number][];
+  angle_snap: boolean;
+  motion_sync: boolean;
+  ripple_control: boolean;
+  sleep_timeout_min: number;
+  move_light_off: boolean;
+  lighting_mode: number;
+  lighting_brightness: number;
+  lighting_speed: number;
+  button_mappings: string[];
+  available_button_actions: MouseButtonActionOption[];
+}
+
+export interface MouseConfigUpdate {
+  polling_rate?: number;
+  lod_mm?: number;
+  debounce_ms?: number;
+  active_stage?: number;
+  stage_count?: number;
+  stage_enable_mask?: number;
+  dpi_stages?: number[];
+  dpi_colors?: [number, number, number][];
+  angle_snap?: boolean;
+  motion_sync?: boolean;
+  ripple_control?: boolean;
+  sleep_timeout_min?: number;
+  move_light_off?: boolean;
+  lighting_mode?: number;
+  lighting_brightness?: number;
+  lighting_speed?: number;
+  button_mappings?: string[];
+}
+
 export interface DeviceHardwareState {
   device_id: string;
   effect_id: number;

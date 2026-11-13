@@ -1,7 +1,9 @@
 pub mod aula;
+pub mod furylevel;
 pub mod generic;
 
 use aula::f75::{remap_targets, AulaF75Driver};
+use furylevel::z1::FurylevelZ1Driver;
 use generic::{discover_generic_devices, GenericDriver};
 use hidapi::HidApi;
 use serde::{Deserialize, Serialize};
@@ -148,12 +150,85 @@ pub struct DeviceHardwareState {
     pub raw_config_valid: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MouseButtonActionOption {
+    pub id: String,
+    pub label_en: String,
+    pub label_tr: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MouseHardwareState {
+    pub device_id: String,
+    pub model_name: String,
+    pub sensor_model: String,
+    pub mcu_model: String,
+    pub firmware_version: String,
+    pub link_label: String,
+    pub online: bool,
+    pub battery_pct: u8,
+    pub is_charging: bool,
+    pub voltage_mv: u16,
+    pub polling_rate: u16,
+    pub max_polling_rate: u16,
+    pub lod_mm: u8,
+    pub debounce_ms: u8,
+    pub active_stage: u8,
+    pub stage_count: u8,
+    pub stage_enable_mask: u8,
+    pub dpi_stages: Vec<u16>,
+    pub dpi_colors: Vec<[u8; 3]>,
+    pub angle_snap: bool,
+    pub motion_sync: bool,
+    pub ripple_control: bool,
+    pub sleep_timeout_min: u16,
+    pub move_light_off: bool,
+    pub lighting_mode: u8,
+    pub lighting_brightness: u8,
+    pub lighting_speed: u8,
+    pub button_mappings: Vec<String>,
+    pub available_button_actions: Vec<MouseButtonActionOption>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MouseConfigUpdate {
+    pub polling_rate: Option<u16>,
+    pub lod_mm: Option<u8>,
+    pub debounce_ms: Option<u8>,
+    pub active_stage: Option<u8>,
+    pub stage_count: Option<u8>,
+    pub stage_enable_mask: Option<u8>,
+    pub dpi_stages: Option<Vec<u16>>,
+    pub dpi_colors: Option<Vec<[u8; 3]>>,
+    pub angle_snap: Option<bool>,
+    pub motion_sync: Option<bool>,
+    pub ripple_control: Option<bool>,
+    pub sleep_timeout_min: Option<u16>,
+    pub move_light_off: Option<bool>,
+    pub lighting_mode: Option<u8>,
+    pub lighting_brightness: Option<u8>,
+    pub lighting_speed: Option<u8>,
+    pub button_mappings: Option<Vec<String>>,
+}
+
 pub trait PeripheralDriver: Send + Sync {
     fn driver_id(&self) -> &'static str;
     fn device_info(&self) -> HardwareDeviceInfo;
     fn read_state(&self) -> Result<DeviceHardwareState, String>;
     /// Non-blocking / low-overhead hardware poll used to track physical FN key & knob edits.
     fn poll_live_state(&self) -> Result<Option<DeviceHardwareState>, String>;
+    fn read_mouse_state(&self) -> Result<Option<MouseHardwareState>, String> {
+        Ok(None)
+    }
+    fn poll_live_mouse_state(&self) -> Result<Option<MouseHardwareState>, String> {
+        Ok(None)
+    }
+    fn apply_mouse_settings(&self, _cfg: MouseConfigUpdate) -> Result<Option<MouseHardwareState>, String> {
+        Ok(None)
+    }
+    fn factory_reset_mouse(&self) -> Result<Option<MouseHardwareState>, String> {
+        Ok(None)
+    }
     fn get_led_topology(&self) -> Vec<LedTopologyNode>;
     fn apply_rgb_effect(
         &self,
@@ -168,6 +243,10 @@ pub trait PeripheralDriver: Send + Sync {
         brightness: u8,
     ) -> Result<DeviceHardwareState, String>;
     fn set_realtime_rgb(&self, colors: Vec<[u8; 3]>) -> Result<(), String>;
+    /// Called once before starting a host-driven realtime animation stream.
+    fn prepare_realtime_stream(&self) -> Result<(), String> {
+        Ok(())
+    }
     fn apply_hardware_flags(
         &self,
         side_mode: Option<u8>,
@@ -192,6 +271,7 @@ pub fn discover_all_devices() -> Vec<HardwareDeviceInfo> {
         return Vec::new();
     };
     let mut list = AulaF75Driver::discover_with_api(&api);
+    list.extend(FurylevelZ1Driver::discover_with_api(&api));
     list.extend(discover_generic_devices(&api));
     list
 }
@@ -203,6 +283,7 @@ pub fn open_driver_for_device(device_id: &str) -> Result<Box<dyn PeripheralDrive
             .iter()
             .find(|d| d.driver_id == "aula-f75" && d.online && d.capabilities.writable)
             .or_else(|| devices.iter().find(|d| d.driver_id == "aula-f75"))
+            .or_else(|| devices.iter().find(|d| d.driver_id == "furylevel-z1"))
             .or_else(|| devices.first())
             .cloned()
             .ok_or_else(|| "No supported HID peripheral detected".to_string())?
@@ -215,6 +296,7 @@ pub fn open_driver_for_device(device_id: &str) -> Result<Box<dyn PeripheralDrive
 
     match info.driver_id.as_str() {
         "aula-f75" => Ok(Box::new(AulaF75Driver::open_from_info(info)?)),
+        "furylevel-z1" => Ok(Box::new(FurylevelZ1Driver::open_from_info(info)?)),
         _ => Ok(Box::new(GenericDriver::new(info))),
     }
 }
@@ -238,6 +320,9 @@ pub fn install_sxboards_udev_rules() -> Result<(), String> {
             r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3554", ATTRS{idProduct}=="fa09", MODE="0666", TAG+="uaccess""#,
             r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3554", ATTRS{idProduct}=="fa08", MODE="0666", TAG+="uaccess""#,
             r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="04f3", ATTRS{idProduct}=="026e", MODE="0666", TAG+="uaccess""#,
+            r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="04f3", ATTRS{idProduct}=="026f", MODE="0666", TAG+="uaccess""#,
+            r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="04f3", ATTRS{idProduct}=="026d", MODE="0666", TAG+="uaccess""#,
+            r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="32c2", ATTRS{idProduct}=="0018", MODE="0666", TAG+="uaccess""#,
             r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="040b", ATTRS{idProduct}=="0897", MODE="0666", TAG+="uaccess""#,
         ]
         .join("\n");

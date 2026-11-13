@@ -731,6 +731,7 @@ pub struct AulaF75Driver {
     hid_path: String,
     cmds: TransportCmds,
     io_lock: Mutex<Option<Instant>>,
+    stream_dev: Mutex<Option<HidDevice>>,
 }
 
 impl AulaF75Driver {
@@ -912,7 +913,35 @@ impl AulaF75Driver {
             hid_path: path,
             cmds,
             io_lock: Mutex::new(None),
+            stream_dev: Mutex::new(None),
         })
+    }
+
+    fn with_stream_hid<F>(&self, f: F) -> Result<(), String>
+    where
+        F: Fn(&HidDevice) -> Result<(), String>,
+    {
+        let mut guard = self
+            .stream_dev
+            .lock()
+            .map_err(|_| "Stream HID mutex poisoned".to_string())?;
+        if guard.is_none() {
+            *guard = Some(self.open_hid()?);
+        }
+        if let Some(ref dev) = *guard {
+            match f(dev) {
+                Ok(()) => return Ok(()),
+                Err(_) => {
+                    *guard = None;
+                }
+            }
+        }
+        let fresh = self.open_hid()?;
+        let res = f(&fresh);
+        if res.is_ok() {
+            *guard = Some(fresh);
+        }
+        res
     }
 
     fn open_hid(&self) -> Result<HidDevice, String> {
@@ -1302,9 +1331,38 @@ impl PeripheralDriver for AulaF75Driver {
         Ok(self.build_state_from_block(&block, full))
     }
 
+    fn prepare_realtime_stream(&self) -> Result<(), String> {
+        self.ensure_writable()?;
+        if self.link != ConnectionLink::Wired {
+            // 2.4G receiver (3554:fa09) streams volatile 0x88 frames directly without
+            // mutating the nonvolatile config block.
+            return Ok(());
+        }
+        let mut guard = self
+            .io_lock
+            .lock()
+            .map_err(|_| "Driver mutex poisoned".to_string())?;
+        Self::enforce_gap(&mut guard, MIN_WIRED_STREAM_GAP_MS);
+        let mut block = self.read_validated_led_block()?;
+        // Wired 0x08 realtime frames only render when the firmware is in Per-Key mode:
+        // byte[9]=0x01, byte[10]=0x15 (CUSTOM_MODE), and byte[59]=0x47 (first slot speed/color).
+        if block[OFF_PER_KEY_FLAG] != 0x01
+            || block[OFF_EFFECT_ID] != CUSTOM_MODE
+            || block[OFF_SLOTS_BASE + 1] != 0x47
+        {
+            encode_effect_block(&mut block, CUSTOM_MODE, 9, 4, 7);
+            block[OFF_SLOTS_BASE + 1] = 0x47;
+            self.wired_write(self.cmds.led, 0, &block, 15)?;
+            // Firmware triggers an async repaint after config write; wait so it doesn't clobber frame 0.
+            thread::sleep(Duration::from_millis(400));
+            *guard = Some(Instant::now());
+        }
+        Ok(())
+    }
+
     fn set_realtime_rgb(&self, colors: Vec<[u8; 3]>) -> Result<(), String> {
         self.ensure_writable()?;
-        let mut full = vec![[0u8, 0u8, 0u8]; LED_COUNT];
+        let mut full = vec![[0u8; 3]; LED_COUNT];
         for (i, c) in colors.iter().take(LED_COUNT).enumerate() {
             full[i] = *c;
         }
@@ -1317,9 +1375,31 @@ impl PeripheralDriver for AulaF75Driver {
         Self::enforce_gap(&mut guard, min_gap);
         if self.link == ConnectionLink::Wired {
             let payload = encode_interleaved_realtime(&full);
-            self.wired_write(self.cmds.realtime, 0, &payload, 7)
+            let packets = build_wired_packets(self.cmds.realtime, 0, payload.len(), Some(&payload));
+            self.with_stream_hid(|dev| {
+                for pk in &packets {
+                    Self::wired_send(dev, pk)?;
+                }
+                Ok(())
+            })
         } else {
-            // Compact group streaming on 2.4G (sub=1 <=200B)
+            // Compact group streaming on 2.4G (sub=1 <= 84B / 6 chunks).
+            // Quantize to coarse non-zero levels so smooth gradients fit and dim keys don't vanish.
+            let quantize_chan = |v: u8| -> u8 {
+                if v == 0 {
+                    0
+                } else if v < 48 {
+                    0x33
+                } else {
+                    match v {
+                        0..=67 => 0x33,
+                        68..=118 => 0x66,
+                        119..=169 => 0x99,
+                        170..=220 => 0xcc,
+                        _ => 0xff,
+                    }
+                }
+            };
             let mut groups: std::collections::BTreeMap<[u8; 3], Vec<u8>> =
                 std::collections::BTreeMap::new();
             for item in build_f75_layout() {
@@ -1327,26 +1407,50 @@ impl PeripheralDriver for AulaF75Driver {
                 if idx < LED_COUNT {
                     let c = full[idx];
                     if c != [0, 0, 0] {
-                        let q = [(c[0] >> 5) << 5, (c[1] >> 5) << 5, (c[2] >> 5) << 5];
-                        groups.entry(q).or_default().push(idx as u8);
+                        let q = [quantize_chan(c[0]), quantize_chan(c[1]), quantize_chan(c[2])];
+                        if q != [0, 0, 0] {
+                            groups.entry(q).or_default().push(idx as u8);
+                        }
                     }
                 }
             }
-            let mut payload = Vec::new();
-            for (c, keys) in groups {
-                if payload.len() + 4 + keys.len() > 196 {
+            // Pack largest color groups first within the 84-byte (6-chunk) wireless frame cap.
+            let mut ordered: Vec<([u8; 3], Vec<u8>)> = groups.into_iter().collect();
+            ordered.sort_by_key(|g| std::cmp::Reverse(g.1.len()));
+
+            let mut payload = Vec::with_capacity(84);
+            for (c, keys) in ordered {
+                if payload.len() + 5 > 84 {
                     break;
+                }
+                let take = keys.len().min(84 - payload.len() - 4);
+                if take == 0 {
+                    continue;
                 }
                 payload.push(c[0]);
                 payload.push(c[1]);
                 payload.push(c[2]);
-                payload.push(keys.len() as u8);
-                payload.extend_from_slice(&keys);
+                payload.push(take as u8);
+                payload.extend_from_slice(&keys[..take]);
             }
             if payload.is_empty() {
-                payload.extend_from_slice(&[0, 0, 0, 1, 0]);
+                let all_keys: Vec<u8> = build_f75_layout()
+                    .into_iter()
+                    .filter_map(|k| u8::try_from(k.matrix_index).ok())
+                    .take(80)
+                    .collect();
+                payload.extend_from_slice(&[0, 0, 0, all_keys.len() as u8]);
+                payload.extend_from_slice(&all_keys);
             }
-            self.wireless_write(self.cmds.realtime, 1, &payload, 6)
+            let packets = build_wl_write_packets(self.cmds.realtime, 1, &payload);
+            self.with_stream_hid(|dev| {
+                for pk in &packets {
+                    dev.write(pk)
+                        .map_err(|e| format!("2.4G HID write failed: {e}"))?;
+                    thread::sleep(Duration::from_millis(6));
+                }
+                Ok(())
+            })
         }
     }
 

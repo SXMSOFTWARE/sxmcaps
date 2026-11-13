@@ -18,7 +18,7 @@ use autostart::{is_autostart_enabled, set_autostart};
 use drivers::{
     discover_all_devices, install_sxboards_udev_rules, list_f75_remap_targets,
     open_driver_for_device, DeviceHardwareState, HardwareDeviceInfo, KeymapEntryDto,
-    PeripheralDriver, RemapTargetDto,
+    MouseConfigUpdate, MouseHardwareState, PeripheralDriver, RemapTargetDto,
 };
 use input_listener::{
     install_udev_input_rule, start_global_listener, GlobalInputEvent, InputListenerHandle,
@@ -1160,21 +1160,91 @@ fn get_sxlighting_state(state: State<'_, Arc<EngineState>>) -> (SxLightingStatus
 }
 
 #[tauri::command]
-fn apply_sxlighting_config(
+async fn apply_sxlighting_config(
     preset: SxLightingPreset,
     active: bool,
     stream_to_hardware: bool,
     device_id: String,
     state: State<'_, Arc<EngineState>>,
 ) -> Result<SxLightingStatus, String> {
-    let driver = if active && !device_id.trim().is_empty() {
-        state.get_or_open_driver(&device_id).ok()
-    } else {
-        None
-    };
-    state
-        .sxlighting
-        .apply_config(preset, active, stream_to_hardware, driver)
+    let eng = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut driver = if active && !device_id.trim().is_empty() {
+            eng.get_or_open_driver(&device_id).ok()
+        } else {
+            None
+        };
+
+        // If the selected UI device cannot stream host RGB (e.g. user clicked a mouse/headset
+        // earlier), automatically target an online host-streaming keyboard if one is connected.
+        if active && stream_to_hardware {
+            let needs_fallback = driver
+                .as_ref()
+                .map(|d| {
+                    let info = d.device_info();
+                    !(info.capabilities.host_streaming && info.online && info.permission_ok)
+                })
+                .unwrap_or(true);
+
+            if needs_fallback {
+                if let Some(target) = discover_all_devices().into_iter().find(|d| {
+                    d.capabilities.host_streaming && d.online && d.permission_ok
+                }) {
+                    if let Ok(drv) = eng.get_or_open_driver(&target.id) {
+                        driver = Some(drv);
+                    }
+                }
+            }
+        }
+
+        eng.sxlighting
+            .apply_config(preset, active, stream_to_hardware, driver)
+    })
+    .await
+    .map_err(|e| format!("SxLighting spawn failed: {e}"))?
+}
+
+#[tauri::command]
+async fn get_mouse_hardware_state(
+    device_id: String,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<Option<MouseHardwareState>, String> {
+    let eng = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let drv = eng.get_or_open_driver(&device_id)?;
+        drv.read_mouse_state()
+    })
+    .await
+    .map_err(|e| format!("Mouse state read failed: {e}"))?
+}
+
+#[tauri::command]
+async fn apply_mouse_hardware_settings(
+    device_id: String,
+    config: MouseConfigUpdate,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<Option<MouseHardwareState>, String> {
+    let eng = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let drv = eng.get_or_open_driver(&device_id)?;
+        drv.apply_mouse_settings(config)
+    })
+    .await
+    .map_err(|e| format!("Mouse write failed: {e}"))?
+}
+
+#[tauri::command]
+async fn factory_reset_mouse_hardware(
+    device_id: String,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<Option<MouseHardwareState>, String> {
+    let eng = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let drv = eng.get_or_open_driver(&device_id)?;
+        drv.factory_reset_mouse()
+    })
+    .await
+    .map_err(|e| format!("Mouse reset failed: {e}"))?
 }
 
 #[tauri::command]
@@ -1451,6 +1521,17 @@ fn spawn_hardware_watcher(engine: Arc<EngineState>, app: AppHandle) {
                 {
                     continue;
                 }
+                if info.device_kind == drivers::DeviceKind::Mouse {
+                    if let Ok(Some(mouse_state)) = drv.poll_live_mouse_state() {
+                        let sig = serde_json::to_string(&mouse_state).unwrap_or_default();
+                        if sig != last_state_sig {
+                            last_state_sig = sig;
+                            let _ = app.emit("sxmcaps://mouse-state", mouse_state);
+                        }
+                    }
+                    continue;
+                }
+
                 if info.link != drivers::ConnectionLink::Wired && tick % 3 != 0 {
                     continue;
                 }
@@ -1694,6 +1775,9 @@ pub fn run() {
             get_sxperformance_state,
             update_sxperformance_config,
             trigger_sxperformance_bypass,
+            get_mouse_hardware_state,
+            apply_mouse_hardware_settings,
+            factory_reset_mouse_hardware,
         ])
         .run(tauri::generate_context!())
         .expect("error while running sxmcaps");

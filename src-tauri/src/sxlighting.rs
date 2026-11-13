@@ -132,6 +132,7 @@ struct EngineShared {
 
 pub struct SxLightingEngine {
     running: Arc<AtomicBool>,
+    force_resend_hw: Arc<AtomicBool>,
     shared: Arc<Mutex<EngineShared>>,
 }
 
@@ -407,6 +408,8 @@ impl SxLightingEngine {
         }));
 
         let run_flag = Arc::clone(&running);
+        let force_resend_hw = Arc::new(AtomicBool::new(true));
+        let force_flag = Arc::clone(&force_resend_hw);
         let shared_bg = Arc::clone(&shared);
 
         std::thread::Builder::new()
@@ -481,8 +484,11 @@ impl SxLightingEngine {
 
                     if stream_hw {
                         if let Some(drv) = driver {
+                            let force_hw = force_flag.swap(false, Ordering::Relaxed)
+                                || prev_hw_frame.is_empty()
+                                || last_hw_send.elapsed() >= Duration::from_secs(2);
                             if last_hw_send.elapsed() >= hw_min_gap {
-                                if frame != prev_hw_frame {
+                                if force_hw || frame != prev_hw_frame {
                                     match drv.set_realtime_rgb(frame.clone()) {
                                         Ok(()) => {
                                             prev_hw_frame = frame;
@@ -521,7 +527,7 @@ impl SxLightingEngine {
             })
             .expect("sxlighting engine spawn failed");
 
-        Self { running, shared }
+        Self { running, force_resend_hw, shared }
     }
 
     pub fn is_streaming(&self) -> bool {
@@ -585,6 +591,28 @@ impl SxLightingEngine {
         driver: Option<Arc<dyn PeripheralDriver>>,
     ) -> Result<SxLightingStatus, String> {
         let valid = validate_preset(preset)?;
+        let mut prep_error: Option<String> = None;
+        let can_hw_stream = if active && stream_to_hardware {
+            if let Some(ref drv) = driver {
+                let info = drv.device_info();
+                if info.capabilities.host_streaming && info.online && info.permission_ok {
+                    match drv.prepare_realtime_stream() {
+                        Ok(()) => true,
+                        Err(e) => {
+                            prep_error = Some(e);
+                            false
+                        }
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
         if let Ok(mut st) = self.shared.lock() {
             if let Some(ref drv) = driver {
                 let topo = drv.get_led_topology();
@@ -593,15 +621,15 @@ impl SxLightingEngine {
                 }
                 let info = drv.device_info();
                 st.is_wired = info.link == crate::drivers::ConnectionLink::Wired;
-                st.streaming_to_hw =
-                    stream_to_hardware && info.capabilities.host_streaming && info.online && info.permission_ok;
+                st.streaming_to_hw = can_hw_stream;
             } else {
                 st.streaming_to_hw = false;
             }
             st.driver = driver;
             st.preset = valid;
-            st.last_error = None;
+            st.last_error = prep_error;
         }
+        self.force_resend_hw.store(true, Ordering::Relaxed);
         self.running.store(active, Ordering::Relaxed);
         Ok(self.status())
     }
