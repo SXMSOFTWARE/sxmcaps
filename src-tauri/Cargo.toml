@@ -1,6 +1,6 @@
 [package]
 name = "sxmcaps"
-version = "0.2.1"
+version = "0.3.0"
 description = "sxmcaps - Low-latency mechanical keyboard & mouse sound simulator"
 authors = ["sxmcaps"]
 edition = "2021"
@@ -24,3 +24,9 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 fastrand = "2"
 libc = "0.2"
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["linux-static-hidraw"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+hidapi = "2.6"

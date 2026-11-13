@@ -1,5 +1,6 @@
 mod audio;
 mod autostart;
+mod drivers;
 mod input_listener;
 mod keycodes;
 mod pack_hub;
@@ -8,9 +9,15 @@ mod settings;
 mod soundpack;
 mod stats;
 mod studio;
+mod sxboards_presets;
 
 use audio::{AudioEngine, DspParams};
 use autostart::{is_autostart_enabled, set_autostart};
+use drivers::{
+    discover_all_devices, install_sxboards_udev_rules, list_f75_remap_targets,
+    open_driver_for_device, DeviceHardwareState, HardwareDeviceInfo, KeymapEntryDto,
+    PeripheralDriver, RemapTargetDto,
+};
 use input_listener::{
     install_udev_input_rule, start_global_listener, GlobalInputEvent, InputListenerHandle,
     InputStatus,
@@ -25,12 +32,17 @@ use soundpack::{
     load_soundpack, LoadedSoundpack, SoundpackInfo,
 };
 use stats::{StatsData, StatsManager};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use studio::{
     export_pack_zip, inspect_audio_file, preview_audio_slice, save_studio_pack,
     AudioInspectResult, StudioPackSpec,
+};
+use sxboards_presets::{
+    load_workspace_store, save_workspace_store, SxBoardMacro, SxBoardPreset,
+    SxBoardWorkspaceStore,
 };
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -54,6 +66,9 @@ pub struct InitialStateDto {
     pub stats: StatsData,
     pub soundpacks_dir: String,
     pub app_version: String,
+    pub devices: Vec<HardwareDeviceInfo>,
+    pub remap_targets: Vec<RemapTargetDto>,
+    pub workspace: SxBoardWorkspaceStore,
 }
 
 pub struct EngineState {
@@ -65,6 +80,8 @@ pub struct EngineState {
     pub input_listener: RwLock<Option<InputListenerHandle>>,
     pub stats: StatsManager,
     pub profile_override: Mutex<Option<ProfileOverrideState>>,
+    pub driver_cache: RwLock<HashMap<String, Arc<dyn PeripheralDriver>>>,
+    pub workspace_store: Mutex<SxBoardWorkspaceStore>,
 }
 
 #[derive(Debug, Clone)]
@@ -222,6 +239,23 @@ impl EngineState {
         }
         Ok(())
     }
+
+    fn get_or_open_driver(&self, device_id: &str) -> Result<Arc<dyn PeripheralDriver>, String> {
+        if !device_id.is_empty() {
+            if let Ok(cache) = self.driver_cache.read() {
+                if let Some(drv) = cache.get(device_id) {
+                    return Ok(Arc::clone(drv));
+                }
+            }
+        }
+        let boxed = open_driver_for_device(device_id)?;
+        let arc: Arc<dyn PeripheralDriver> = Arc::from(boxed);
+        let id = arc.device_info().id;
+        if let Ok(mut cache) = self.driver_cache.write() {
+            cache.insert(id, Arc::clone(&arc));
+        }
+        Ok(arc)
+    }
 }
 
 fn collect_builtin_roots(app: &AppHandle) -> Vec<PathBuf> {
@@ -264,6 +298,13 @@ fn get_initial_state(state: State<'_, Arc<EngineState>>) -> InitialStateDto {
         .unwrap_or_default();
     let audio_devices = AudioEngine::list_output_devices();
     let stats = state.stats.snapshot();
+    let devices = discover_all_devices();
+    let remap_targets = list_f75_remap_targets();
+    let workspace = state
+        .workspace_store
+        .lock()
+        .map(|g| g.clone())
+        .unwrap_or_default();
 
     InitialStateDto {
         settings,
@@ -273,6 +314,9 @@ fn get_initial_state(state: State<'_, Arc<EngineState>>) -> InitialStateDto {
         stats,
         soundpacks_dir: user_soundpacks_dir().to_string_lossy().to_string(),
         app_version: format!("v{}", env!("CARGO_PKG_VERSION")),
+        devices,
+        remap_targets,
+        workspace,
     }
 }
 
@@ -695,6 +739,383 @@ async fn check_app_update() -> Result<UpdateCheckResult, String> {
         .map_err(|e| format!("Güncelleme kontrolü hatası: {e}"))?
 }
 
+// ============================================================================
+// SxBoards Modular Driver & Hardware Communication Commands
+// ============================================================================
+#[tauri::command]
+async fn discover_hardware_devices(
+    state: State<'_, Arc<EngineState>>,
+) -> Result<Vec<HardwareDeviceInfo>, String> {
+    if let Ok(mut cache) = state.driver_cache.write() {
+        cache.clear();
+    }
+    tauri::async_runtime::spawn_blocking(discover_all_devices)
+        .await
+        .map_err(|e| format!("Hardware discovery error: {e}"))
+}
+
+#[tauri::command]
+async fn get_device_hardware_state(
+    device_id: String,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<DeviceHardwareState, String> {
+    let drv = state.get_or_open_driver(&device_id)?;
+    tauri::async_runtime::spawn_blocking(move || drv.read_state())
+        .await
+        .map_err(|e| format!("Device read error: {e}"))?
+}
+
+#[tauri::command]
+async fn apply_device_rgb_effect(
+    device_id: String,
+    effect_id: u8,
+    brightness: u8,
+    speed: u8,
+    color_idx: u8,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<DeviceHardwareState, String> {
+    let drv = state.get_or_open_driver(&device_id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        drv.apply_rgb_effect(effect_id, brightness, speed, color_idx)
+    })
+    .await
+    .map_err(|e| format!("RGB write error: {e}"))?
+}
+
+#[tauri::command]
+async fn apply_device_per_key_rgb(
+    device_id: String,
+    colors: Vec<[u8; 3]>,
+    brightness: u8,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<DeviceHardwareState, String> {
+    let drv = state.get_or_open_driver(&device_id)?;
+    tauri::async_runtime::spawn_blocking(move || drv.apply_per_key_rgb(colors, brightness))
+        .await
+        .map_err(|e| format!("Per-key RGB write error: {e}"))?
+}
+
+#[tauri::command]
+async fn set_device_realtime_rgb(
+    device_id: String,
+    colors: Vec<[u8; 3]>,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<(), String> {
+    let drv = state.get_or_open_driver(&device_id)?;
+    tauri::async_runtime::spawn_blocking(move || drv.set_realtime_rgb(colors))
+        .await
+        .map_err(|e| format!("Realtime RGB error: {e}"))?
+}
+
+#[tauri::command]
+async fn apply_device_hardware_flags(
+    device_id: String,
+    side_mode: Option<u8>,
+    knob_mode: Option<u8>,
+    os_mode: Option<u8>,
+    win_lock: Option<bool>,
+    sleep_seconds: Option<u16>,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<DeviceHardwareState, String> {
+    let drv = state.get_or_open_driver(&device_id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        drv.apply_hardware_flags(side_mode, knob_mode, os_mode, win_lock, sleep_seconds)
+    })
+    .await
+    .map_err(|e| format!("Hardware flags write error: {e}"))?
+}
+
+#[tauri::command]
+async fn read_device_keymap(
+    device_id: String,
+    layer: u8,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<Vec<KeymapEntryDto>, String> {
+    let drv = state.get_or_open_driver(&device_id)?;
+    tauri::async_runtime::spawn_blocking(move || drv.read_keymap(layer))
+        .await
+        .map_err(|e| format!("Keymap read error: {e}"))?
+}
+
+#[tauri::command]
+async fn write_device_keymap_entry(
+    device_id: String,
+    layer: u8,
+    matrix_index: u8,
+    code: [u8; 4],
+    state: State<'_, Arc<EngineState>>,
+) -> Result<Vec<KeymapEntryDto>, String> {
+    let drv = state.get_or_open_driver(&device_id)?;
+    tauri::async_runtime::spawn_blocking(move || drv.write_keymap_entry(layer, matrix_index, code))
+        .await
+        .map_err(|e| format!("Keymap write error: {e}"))?
+}
+
+#[tauri::command]
+async fn restore_device_keymap_layer(
+    device_id: String,
+    layer: u8,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<Vec<KeymapEntryDto>, String> {
+    let drv = state.get_or_open_driver(&device_id)?;
+    tauri::async_runtime::spawn_blocking(move || drv.restore_default_layer(layer))
+        .await
+        .map_err(|e| format!("Keymap restore error: {e}"))?
+}
+
+#[tauri::command]
+async fn install_sxboards_udev(
+    state: State<'_, Arc<EngineState>>,
+) -> Result<(InputStatus, Vec<HardwareDeviceInfo>), String> {
+    tauri::async_runtime::spawn_blocking(install_sxboards_udev_rules)
+        .await
+        .map_err(|e| format!("udev spawn failed: {e}"))??;
+    if let Ok(listener) = state.input_listener.read() {
+        if let Some(ref h) = *listener {
+            h.trigger_rescan();
+        }
+    }
+    std::thread::sleep(Duration::from_millis(450));
+    let input_status = state
+        .input_listener
+        .read()
+        .ok()
+        .and_then(|g| g.as_ref().map(|h| h.get_status()))
+        .unwrap_or_default();
+    if let Ok(mut cache) = state.driver_cache.write() {
+        cache.clear();
+    }
+    let devices = discover_all_devices();
+    Ok((input_status, devices))
+}
+
+#[tauri::command]
+fn get_sxboard_workspace(state: State<'_, Arc<EngineState>>) -> SxBoardWorkspaceStore {
+    state
+        .workspace_store
+        .lock()
+        .map(|g| g.clone())
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn create_sxboard_preset(
+    name: String,
+    preset: SxBoardPreset,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<SxBoardWorkspaceStore, String> {
+    let mut store = state
+        .workspace_store
+        .lock()
+        .map_err(|_| "Workspace lock poisoned".to_string())?;
+    let slug: String = name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let id = format!("{}-{}", slug.trim_matches('-'), fastrand::u32(100..9999));
+    let mut entry = preset;
+    entry.id = id.clone();
+    entry.name = if name.trim().is_empty() {
+        "Custom Preset".to_string()
+    } else {
+        name.trim().to_string()
+    };
+    store.presets.push(entry);
+    store.active_preset_id = id;
+    save_workspace_store(&store)?;
+    Ok(store.clone())
+}
+
+#[tauri::command]
+fn save_in_active_sxboard_preset(
+    preset: SxBoardPreset,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<SxBoardWorkspaceStore, String> {
+    let mut store = state
+        .workspace_store
+        .lock()
+        .map_err(|_| "Workspace lock poisoned".to_string())?;
+    let active_id = store.active_preset_id.clone();
+    if let Some(target) = store.presets.iter_mut().find(|p| p.id == active_id) {
+        let keep_name = target.name.clone();
+        *target = preset;
+        target.id = active_id;
+        target.name = keep_name;
+    }
+    save_workspace_store(&store)?;
+    Ok(store.clone())
+}
+
+#[tauri::command]
+fn overwrite_sxboard_preset(
+    preset_id: String,
+    preset: SxBoardPreset,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<SxBoardWorkspaceStore, String> {
+    let mut store = state
+        .workspace_store
+        .lock()
+        .map_err(|_| "Workspace lock poisoned".to_string())?;
+    if let Some(target) = store.presets.iter_mut().find(|p| p.id == preset_id) {
+        let keep_name = if preset.name.trim().is_empty() {
+            target.name.clone()
+        } else {
+            preset.name.clone()
+        };
+        *target = preset;
+        target.id = preset_id.clone();
+        target.name = keep_name;
+        store.active_preset_id = preset_id;
+    }
+    save_workspace_store(&store)?;
+    Ok(store.clone())
+}
+
+#[tauri::command]
+async fn select_and_apply_sxboard_preset(
+    preset_id: String,
+    device_id: String,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<(SxBoardWorkspaceStore, Option<DeviceHardwareState>, AppSettings), String> {
+    let preset = {
+        let mut store = state
+            .workspace_store
+            .lock()
+            .map_err(|_| "Workspace lock poisoned".to_string())?;
+        let p = store
+            .presets
+            .iter()
+            .find(|p| p.id == preset_id)
+            .cloned()
+            .ok_or_else(|| "Preset not found".to_string())?;
+        store.active_preset_id = preset_id;
+        save_workspace_store(&store)?;
+        p
+    };
+
+    // Update sound & DSP settings from preset cleanly
+    let mut next_cfg = state.settings.read().map(|g| g.clone()).unwrap_or_default();
+    if !preset.keyboard_pack.is_empty() {
+        next_cfg.active_keyboard_pack = preset.keyboard_pack.clone();
+    }
+    if !preset.mouse_pack.is_empty() {
+        next_cfg.active_mouse_pack = preset.mouse_pack.clone();
+    }
+    if !preset.plate_preset.is_empty() {
+        next_cfg.plate_preset = preset.plate_preset.clone();
+    }
+    save_settings(&next_cfg)?;
+    if let Ok(mut g) = state.settings.write() {
+        *g = next_cfg.clone();
+    }
+    state.audio.update_dsp(DspParams::from_settings(&next_cfg));
+    state.reload_active_packs();
+
+    // Apply to hardware if writable driver exists
+    let hw_state = if !device_id.is_empty() {
+        if let Ok(drv) = state.get_or_open_driver(&device_id) {
+            let info = drv.device_info();
+            if info.capabilities.writable && info.online {
+                let eff = preset.effect_id;
+                let br = preset.brightness;
+                let sp = preset.speed;
+                let col = preset.color_idx;
+                let side = preset.side_mode;
+                let knob = preset.knob_mode;
+                let os = preset.os_mode;
+                let wl = preset.win_lock;
+                let sl = preset.sleep_seconds;
+                let pk = preset.per_key_colors.clone();
+                let _ = tauri::async_runtime::spawn_blocking(move || {
+                    if eff == 21 && !pk.is_empty() {
+                        let _ = drv.apply_per_key_rgb(pk, br);
+                    } else {
+                        let _ = drv.apply_rgb_effect(eff, br, sp, col);
+                    }
+                    drv.apply_hardware_flags(Some(side), Some(knob), Some(os), Some(wl), Some(sl))
+                })
+                .await;
+                if let Ok(drv2) = state.get_or_open_driver(&device_id) {
+                    tauri::async_runtime::spawn_blocking(move || drv2.read_state())
+                        .await
+                        .ok()
+                        .and_then(|r| r.ok())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let store = state
+        .workspace_store
+        .lock()
+        .map(|g| g.clone())
+        .unwrap_or_default();
+    Ok((store, hw_state, next_cfg))
+}
+
+#[tauri::command]
+fn delete_sxboard_preset(
+    preset_id: String,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<SxBoardWorkspaceStore, String> {
+    let mut store = state
+        .workspace_store
+        .lock()
+        .map_err(|_| "Workspace lock poisoned".to_string())?;
+    if store.presets.len() <= 1 {
+        return Err("En az bir preset bulunmalıdır / Keep at least one preset.".to_string());
+    }
+    store.presets.retain(|p| p.id != preset_id);
+    if store.active_preset_id == preset_id {
+        store.active_preset_id = store.presets[0].id.clone();
+    }
+    save_workspace_store(&store)?;
+    Ok(store.clone())
+}
+
+#[tauri::command]
+fn save_sxboard_macros(
+    macros: Vec<SxBoardMacro>,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<SxBoardWorkspaceStore, String> {
+    let mut store = state
+        .workspace_store
+        .lock()
+        .map_err(|_| "Workspace lock poisoned".to_string())?;
+    store.macros = macros;
+    save_workspace_store(&store)?;
+    Ok(store.clone())
+}
+
+#[tauri::command]
+async fn flash_macros_to_device(
+    device_id: String,
+    macros: Vec<SxBoardMacro>,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<(), String> {
+    {
+        let mut store = state
+            .workspace_store
+            .lock()
+            .map_err(|_| "Workspace lock poisoned".to_string())?;
+        store.macros = macros.clone();
+        save_workspace_store(&store)?;
+    }
+    let drv = state.get_or_open_driver(&device_id)?;
+    tauri::async_runtime::spawn_blocking(move || drv.write_macros(&macros))
+        .await
+        .map_err(|e| format!("Macro flash error: {e}"))?
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.unminimize();
@@ -809,6 +1230,8 @@ pub fn run() {
     let audio = AudioEngine::new(initial_settings.audio_device.clone(), dsp);
     let stats = StatsManager::load();
 
+    let workspace = load_workspace_store();
+
     let engine = Arc::new(EngineState {
         audio,
         settings: RwLock::new(initial_settings),
@@ -818,6 +1241,8 @@ pub fn run() {
         input_listener: RwLock::new(None),
         stats,
         profile_override: Mutex::new(None),
+        driver_cache: RwLock::new(HashMap::new()),
+        workspace_store: Mutex::new(workspace),
     });
 
     let engine_setup = Arc::clone(&engine);
@@ -969,6 +1394,24 @@ pub fn run() {
             get_pack_hub_catalog,
             install_hub_pack,
             check_app_update,
+            discover_hardware_devices,
+            get_device_hardware_state,
+            apply_device_rgb_effect,
+            apply_device_per_key_rgb,
+            set_device_realtime_rgb,
+            apply_device_hardware_flags,
+            read_device_keymap,
+            write_device_keymap_entry,
+            restore_device_keymap_layer,
+            install_sxboards_udev,
+            get_sxboard_workspace,
+            create_sxboard_preset,
+            save_in_active_sxboard_preset,
+            overwrite_sxboard_preset,
+            select_and_apply_sxboard_preset,
+            delete_sxboard_preset,
+            save_sxboard_macros,
+            flash_macros_to_device,
         ])
         .run(tauri::generate_context!())
         .expect("error while running sxmcaps");

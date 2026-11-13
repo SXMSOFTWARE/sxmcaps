@@ -116,6 +116,135 @@ export interface UpdateCheckResult {
   notes: string;
 }
 
+export type DeviceKind = 'keyboard' | 'mouse' | 'audio' | 'peripheral';
+export type ConnectionLink = 'wired' | 'wireless_24g' | 'bluetooth' | 'usb_hid';
+
+export interface DeviceCapabilities {
+  rgb_effects: boolean;
+  per_key_rgb: boolean;
+  side_light: boolean;
+  knob_mode: boolean;
+  os_mode: boolean;
+  win_lock: boolean;
+  sleep_timer: boolean;
+  key_remapping: boolean;
+  fn_layers: boolean;
+  macros: boolean;
+  battery_status: boolean;
+  sound_engine: boolean;
+  writable: boolean;
+}
+
+export interface HardwareDeviceInfo {
+  id: string;
+  driver_id: string;
+  brand: string;
+  model: string;
+  display_name: string;
+  device_kind: DeviceKind;
+  vendor_id: number;
+  product_id: number;
+  vid_pid: string;
+  link: ConnectionLink;
+  hid_path: string | null;
+  interface_number: number;
+  usage_page: number;
+  online: boolean;
+  permission_ok: boolean;
+  capabilities: DeviceCapabilities;
+  notes: string;
+}
+
+export interface EffectMetaDto {
+  id: number;
+  name_en: string;
+  name_tr: string;
+  has_speed: boolean;
+  has_brightness: boolean;
+  has_color: boolean;
+}
+
+export interface KeyLayoutItemDto {
+  matrix_index: number;
+  label: string;
+  web_code: string;
+  row: number;
+  x: number;
+  width: number;
+}
+
+export interface KeymapEntryDto {
+  matrix_index: number;
+  key_label: string;
+  web_code: string;
+  code: [number, number, number, number];
+  assigned_label: string;
+  is_modified: boolean;
+}
+
+export interface RemapTargetDto {
+  label: string;
+  code: [number, number, number, number];
+  category: string;
+}
+
+export interface DeviceHardwareState {
+  device_id: string;
+  effect_id: number;
+  effect_name: string;
+  brightness: number;
+  speed: number;
+  color_idx: number;
+  side_mode: number;
+  knob_mode: number;
+  os_mode: number;
+  win_lock: boolean;
+  sleep_seconds: number;
+  per_key_colors: [number, number, number][];
+  supported_effects: EffectMetaDto[];
+  layout: KeyLayoutItemDto[];
+  raw_config_valid: boolean;
+}
+
+export interface MacroEventStep {
+  web_code: string;
+  key_label: string;
+  is_down: boolean;
+  delay_ms: number;
+}
+
+export interface SxBoardMacro {
+  id: string;
+  name: string;
+  category: string;
+  steps: MacroEventStep[];
+}
+
+export interface SxBoardPreset {
+  id: string;
+  name: string;
+  device_id: string;
+  effect_id: number;
+  brightness: number;
+  speed: number;
+  color_idx: number;
+  side_mode: number;
+  knob_mode: number;
+  os_mode: number;
+  win_lock: boolean;
+  sleep_seconds: number;
+  per_key_colors: [number, number, number][];
+  keyboard_pack: string;
+  mouse_pack: string;
+  plate_preset: string;
+}
+
+export interface SxBoardWorkspaceStore {
+  active_preset_id: string;
+  presets: SxBoardPreset[];
+  macros: SxBoardMacro[];
+}
+
 export interface InitialStateDto {
   settings: AppSettings;
   soundpacks: SoundpackInfo[];
@@ -124,6 +253,9 @@ export interface InitialStateDto {
   stats: StatsData;
   soundpacks_dir: string;
   app_version: string;
+  devices: HardwareDeviceInfo[];
+  remap_targets: RemapTargetDto[];
+  workspace: SxBoardWorkspaceStore;
 }
 
 export interface UiInputEvent {

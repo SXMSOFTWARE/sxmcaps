@@ -2,6 +2,13 @@
 
 :root {
   color-scheme: dark;
+  --sxb-bg: #08070d;
+  --sxb-rail: #0d0b15;
+  --sxb-panel: #120f1d;
+  --sxb-card: #171326;
+  --sxb-border: rgba(168, 85, 247, 0.16);
+  --sxb-accent: #9333ea;
+  --sxb-accent-hi: #a855f7;
 }
 
 * {
@@ -11,8 +18,8 @@
 body {
   margin: 0;
   font-family: 'Inter', 'SF Pro Display', system-ui, -apple-system, sans-serif;
-  background: #050506;
-  color: #fafafa;
+  background: #08070d;
+  color: #f4f1ff;
   overflow-x: hidden;
 }
 
@@ -26,21 +33,21 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(168, 85, 247, 0.25);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(168, 85, 247, 0.45);
 }
 
-/* Monochrome Black & White Range Slider */
+/* SxBoards Neon Violet Slider */
 input[type='range'].sxm-slider {
   -webkit-appearance: none;
   appearance: none;
   height: 5px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(168, 85, 247, 0.22);
   outline: none;
 }
 
@@ -50,13 +57,20 @@ input[type='range'].sxm-slider::-webkit-slider-thumb {
   width: 14px;
   height: 14px;
   border-radius: 9999px;
-  background: #ffffff;
+  background: #c084fc;
   cursor: pointer;
-  border: 2px solid #050506;
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
-  transition: transform 0.12s ease;
+  border: 2px solid #09080f;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.75);
+  transition: transform 0.12s ease, background 0.12s ease;
 }
 
 input[type='range'].sxm-slider::-webkit-slider-thumb:hover {
   transform: scale(1.18);
+  background: #ffffff;
+}
+
+.sxb-stage-bg {
+  background:
+    radial-gradient(ellipse 68% 58% at 52% 48%, rgba(147, 51, 234, 0.22) 0%, rgba(109, 40, 217, 0.08) 45%, rgba(8, 7, 13, 0.96) 100%),
+    linear-gradient(135deg, #0b0914 0%, #07060b 55%, #110b22 100%);
 }

@@ -142,15 +142,15 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
   return (
     <div className="grid h-full grid-cols-1 gap-3.5 overflow-y-auto lg:grid-cols-12">
       {/* Left: Pack Metadata */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0b0b0e] p-4 lg:col-span-4">
-        <div className="flex items-center gap-2 border-b border-white/[0.07] pb-2.5 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
-          <Scissors className="h-3.5 w-3.5 text-white" />
+      <div className="flex flex-col gap-3 rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4 lg:col-span-4">
+        <div className="flex items-center gap-2 border-b border-purple-500/15 pb-2.5 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
+          <Scissors className="h-3.5 w-3.5 text-purple-400" />
           {t.studio.title}
         </div>
 
         <p className="text-[11px] leading-relaxed text-zinc-400">
           {t.studio.introBefore}{' '}
-          <code className="rounded bg-white/10 px-1 text-zinc-200">
+          <code className="rounded bg-purple-500/15 px-1 text-zinc-200">
             .wav/.ogg/.mp3
           </code>{' '}
           {t.studio.introAfter}
@@ -166,7 +166,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t.studio.packNamePlaceholder}
-              className="w-full rounded-lg border border-white/15 bg-[#050506] px-3 py-2 text-xs text-white placeholder-zinc-600 outline-none focus:border-white"
+              className="w-full rounded-lg border border-purple-500/25 bg-[#0a0812] px-3 py-2 text-xs text-white placeholder-zinc-600 outline-none focus:border-purple-400"
             />
           </div>
 
@@ -178,7 +178,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
               <select
                 value={tag}
                 onChange={(e) => setTag(e.target.value)}
-                className="w-full cursor-pointer rounded-lg border border-white/15 bg-[#050506] px-2.5 py-2 text-xs text-white outline-none focus:border-white"
+                className="w-full cursor-pointer rounded-lg border border-purple-500/25 bg-[#0a0812] px-2.5 py-2 text-xs text-white outline-none focus:border-purple-400"
               >
                 <option value="Linear">Linear</option>
                 <option value="Tactile">Tactile</option>
@@ -195,7 +195,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                 type="text"
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}
-                className="w-full rounded-lg border border-white/15 bg-[#050506] px-2.5 py-2 text-xs text-white outline-none focus:border-white"
+                className="w-full rounded-lg border border-purple-500/25 bg-[#0a0812] px-2.5 py-2 text-xs text-white outline-none focus:border-purple-400"
               />
             </div>
           </div>
@@ -209,7 +209,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t.studio.descPlaceholder}
-              className="w-full resize-none rounded-lg border border-white/15 bg-[#050506] px-3 py-2 text-xs text-white placeholder-zinc-600 outline-none focus:border-white"
+              className="w-full resize-none rounded-lg border border-purple-500/25 bg-[#0a0812] px-3 py-2 text-xs text-white placeholder-zinc-600 outline-none focus:border-purple-400"
             />
           </div>
         </div>
@@ -218,7 +218,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
           type="button"
           disabled={!canSave}
           onClick={handleSave}
-          className="mt-auto inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+          className="mt-auto inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Save className="h-4 w-4" />
           {saving ? t.studio.saving : t.studio.createAndActivate}
@@ -226,17 +226,17 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
       </div>
 
       {/* Right: Key Mappings & Waveform Trimmer */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0b0b0e] p-4 lg:col-span-8">
-        <div className="flex items-center justify-between border-b border-white/[0.07] pb-2.5">
+      <div className="flex flex-col gap-3 rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4 lg:col-span-8">
+        <div className="flex items-center justify-between border-b border-purple-500/15 pb-2.5">
           <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
-            <AudioWaveform className="h-3.5 w-3.5 text-white" />
+            <AudioWaveform className="h-3.5 w-3.5 text-purple-400" />
             {t.studio.mappingsTitle}
           </div>
 
           <button
             type="button"
             onClick={addMappingRow}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-white/20 bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-white hover:bg-white hover:text-black"
+            className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-purple-500/25 bg-purple-500/15 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-600 hover:text-white"
           >
             <Plus className="h-3.5 w-3.5" />
             {t.studio.addKey}
@@ -247,7 +247,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
           {rows.map((row) => (
             <div
               key={row.id}
-              className="space-y-2.5 rounded-xl border border-white/10 bg-[#060608] p-3"
+              className="space-y-2.5 rounded-xl border border-purple-500/20 bg-[#0a0812] p-3"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <select
@@ -255,7 +255,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                   onChange={(e) =>
                     updateRow(row.id, { webCode: e.target.value })
                   }
-                  className="cursor-pointer rounded-lg border border-white/15 bg-[#121216] px-2.5 py-1.5 text-xs font-semibold text-white outline-none"
+                  className="cursor-pointer rounded-lg border border-purple-500/25 bg-[#161224] px-2.5 py-1.5 text-xs font-semibold text-white outline-none"
                 >
                   {keyTargets.map((k) => (
                     <option key={k.code} value={k.code}>
@@ -268,7 +268,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                   <button
                     type="button"
                     onClick={() => handlePickForRow(row.id, 'down')}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/20 bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-white hover:text-black"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-purple-500/25 bg-purple-500/15 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-purple-600 hover:text-white"
                   >
                     <FileAudio className="h-3.5 w-3.5" />
                     {row.downAudio ? row.downAudio.file_name : t.studio.pickDown}
@@ -277,7 +277,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                   <button
                     type="button"
                     onClick={() => handlePickForRow(row.id, 'up')}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-[#121216] px-2.5 py-1 text-[11px] text-zinc-300 hover:border-white/30 hover:text-white"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-purple-500/20 bg-[#161224] px-2.5 py-1 text-[11px] text-zinc-300 hover:border-purple-400/30 hover:text-white"
                   >
                     <FileAudio className="h-3.5 w-3.5" />
                     {row.upAudio
@@ -291,7 +291,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                       onClick={() =>
                         setRows((prev) => prev.filter((r) => r.id !== row.id))
                       }
-                      className="cursor-pointer rounded p-1 text-zinc-500 hover:bg-white/10 hover:text-white"
+                      className="cursor-pointer rounded p-1 text-zinc-500 hover:bg-purple-500/20 hover:text-white"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -300,9 +300,9 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
               </div>
 
               {row.downAudio && (
-                <div className="space-y-2 border-t border-white/[0.06] pt-2">
+                <div className="space-y-2 border-t border-purple-500/10 pt-2">
                   {/* Waveform Preview Bar */}
-                  <div className="relative flex h-10 items-end gap-[2px] overflow-hidden rounded-lg border border-white/10 bg-black px-2 py-1">
+                  <div className="relative flex h-10 items-end gap-[2px] overflow-hidden rounded-lg border border-purple-500/20 bg-[#08060e] px-2 py-1">
                     {row.downAudio.waveform.map((amp, idx) => {
                       const pct = (idx / row.downAudio!.waveform.length) * 100;
                       const startPct =
@@ -317,7 +317,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                           key={idx}
                           style={{ height: `${Math.max(10, amp * 100)}%` }}
                           className={`flex-1 rounded-t-xs transition-colors ${
-                            inside ? 'bg-white' : 'bg-zinc-800'
+                            inside ? 'bg-purple-400' : 'bg-[#211b36]'
                           }`}
                         />
                       );
@@ -372,7 +372,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                           row.downDurationMs
                         )
                       }
-                      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white/20 bg-white/[0.08] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-white hover:text-black"
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-purple-500/25 bg-purple-500/15 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-purple-600 hover:text-white"
                     >
                       <Play className="h-3 w-3 fill-current" />
                       {t.studio.listen}

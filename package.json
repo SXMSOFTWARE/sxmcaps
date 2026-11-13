@@ -1,9 +1,9 @@
 {
   "name": "sxmcaps",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
-  "description": "sxmcaps - Mechanical keycap & mouse sound simulator",
+  "description": "SxBoards (sxmcaps) - Universal Peripheral Driver & Keycap Sound Platform",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
