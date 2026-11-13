@@ -11,6 +11,7 @@ import {
   InitialStateDto,
   InputStatus,
   KeymapEntryDto,
+  LightingPreviewFrame,
   RemapTargetDto,
   SoundpackInfo,
   StatsData,
@@ -18,13 +19,20 @@ import {
   SxBoardMacro,
   SxBoardPreset,
   SxBoardWorkspaceStore,
+  SxLightingPreset,
+  SxLightingStatus,
+  SxPerformanceConfig,
+  SxPerformanceDiagnostics,
   UiInputEvent,
   UpdateCheckResult,
 } from './types';
 import { I18nProvider, resolveLanguage, TRANSLATIONS } from './i18n';
 import { AulaF75BoardStage } from './components/AulaF75BoardStage';
+import { SxmOverviewDashboard } from './components/SxmOverviewDashboard';
+import { SxLightingStudioPanel } from './components/SxLightingStudioPanel';
+import { SxPerformancePanel } from './components/SxPerformancePanel';
+import { DeviceSpecificNoticeCard } from './components/DeviceSpecificNoticeCard';
 import { SxBoardDevicesPanel } from './components/SxBoardDevicesPanel';
-import { SxBoardRgbPanel } from './components/SxBoardRgbPanel';
 import { SxBoardKeysPanel } from './components/SxBoardKeysPanel';
 import { SxBoardMacrosPanel } from './components/SxBoardMacrosPanel';
 import { SoundpackGrid } from './components/SoundpackGrid';
@@ -38,15 +46,18 @@ import {
   Activity,
   BarChart3,
   Cpu,
+  Gauge,
   Globe,
+  Headphones,
   Keyboard,
+  Layers,
+  LayoutGrid,
   Mouse,
   Plus,
   Save,
   Scissors,
   Settings,
   Sliders,
-  Sparkles,
   Trash2,
   Volume2,
   VolumeX,
@@ -55,8 +66,10 @@ import {
 } from 'lucide-react';
 
 type MainSection =
+  | 'overview'
   | 'devices'
   | 'rgb'
+  | 'performance'
   | 'keys'
   | 'macros'
   | 'sound'
@@ -64,6 +77,64 @@ type MainSection =
   | 'system';
 
 type SoundSubTab = 'switches' | 'mouse' | 'dsp' | 'studio';
+
+const EMPTY_SXLIGHTING_PRESET: SxLightingPreset = {
+  magic: 'SXL1',
+  version: 1,
+  id: 'builtin-mono-pulse',
+  name: 'Monochrome Studio Pulse',
+  author: 'SxmCaps',
+  description: '',
+  fps: 30,
+  max_brightness: 85,
+  layers: [],
+};
+
+const EMPTY_SXLIGHTING_STATUS: SxLightingStatus = {
+  active: false,
+  hardware_streaming: false,
+  target_device_id: '',
+  actual_fps: 0,
+  frames_sent: 0,
+  frames_deduped: 0,
+  last_error: null,
+  active_preset: EMPTY_SXLIGHTING_PRESET,
+};
+
+const EMPTY_SXPERF_CONFIG: SxPerformanceConfig = {
+  enabled: false,
+  socd_mode: 'last_input',
+  socd_pairs: [
+    { key_a: 'KeyA', key_b: 'KeyD' },
+    { key_a: 'KeyW', key_b: 'KeyS' },
+  ],
+  mod_taps: [],
+  tap_dances: [],
+  one_shot_mods: [],
+  key_remaps: {},
+  emergency_bypass_key: 'Pause',
+  bypass_on_unsupported_game: false,
+};
+
+const EMPTY_SXPERF_DIAG: SxPerformanceDiagnostics = {
+  enabled: false,
+  uinput_ready: false,
+  virtual_pipeline_active: false,
+  grabbed_devices: [],
+  events_processed: 0,
+  socd_resolutions: 0,
+  mod_tap_triggers: 0,
+  dropped_events: 0,
+  reconnect_count: 0,
+  events_per_sec: 0,
+  last_proc_us: 0,
+  avg_proc_us: 0,
+  p95_proc_us: 0,
+  max_proc_us: 0,
+  last_error: null,
+  latency_disclaimer:
+    'Measures SxmCaps software pipeline latency (evdev -> TransformPipeline -> uinput).',
+};
 
 const DEFAULT_SETTINGS: AppSettings = {
   active_keyboard_pack: 'cherrymx-brown-pbt',
@@ -141,7 +212,7 @@ function normalizeError(err: unknown): string {
 }
 
 export function App() {
-  const [section, setSection] = useState<MainSection>('devices');
+  const [section, setSection] = useState<MainSection>('overview');
   const [soundTab, setSoundTab] = useState<SoundSubTab>('switches');
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -153,7 +224,7 @@ export function App() {
     null
   );
   const [soundpacksDir, setSoundpacksDir] = useState('');
-  const [appVersion, setAppVersion] = useState('v0.3.0');
+  const [appVersion, setAppVersion] = useState('v0.4.0');
   const [inputStatus, setInputStatus] = useState<InputStatus>({
     has_permission: true,
     active_devices: [],
@@ -168,6 +239,19 @@ export function App() {
   const [hwState, setHwState] = useState<DeviceHardwareState | null>(null);
   const [hwBusy, setHwBusy] = useState(false);
   const [scanningHw, setScanningHw] = useState(false);
+
+  // SxLighting & SxPerformance states
+  const [sxLightingStatus, setSxLightingStatus] = useState<SxLightingStatus>(
+    EMPTY_SXLIGHTING_STATUS
+  );
+  const [sxLightingPresets, setSxLightingPresets] = useState<SxLightingPreset[]>([]);
+  const [lightingFrame, setLightingFrame] = useState<LightingPreviewFrame | null>(null);
+  const [sxPerfConfig, setSxPerfConfig] = useState<SxPerformanceConfig>(
+    EMPTY_SXPERF_CONFIG
+  );
+  const [sxPerfDiag, setSxPerfDiag] = useState<SxPerformanceDiagnostics>(
+    EMPTY_SXPERF_DIAG
+  );
 
   const [keymapLayer0, setKeymapLayer0] = useState<KeymapEntryDto[]>([]);
   const [keymapLayer1, setKeymapLayer1] = useState<KeymapEntryDto[]>([]);
@@ -313,9 +397,16 @@ export function App() {
         setDevices(dto.devices);
         setRemapTargets(dto.remap_targets);
         setWorkspace(dto.workspace);
+        if (dto.sxlighting_status) setSxLightingStatus(dto.sxlighting_status);
+        if (dto.sxlighting_presets) setSxLightingPresets(dto.sxlighting_presets);
+        if (dto.sxperformance_config) setSxPerfConfig(dto.sxperformance_config);
+        if (dto.sxperformance_diagnostics) setSxPerfDiag(dto.sxperformance_diagnostics);
 
         const bestId = pickPreferredDeviceId(dto.devices);
         setActiveDeviceId(bestId);
+        if (bestId) {
+          invoke('set_watched_hardware_device', { deviceId: bestId }).catch(() => {});
+        }
         const bestDev = dto.devices.find((d) => d.id === bestId);
         if (
           bestDev &&
@@ -324,8 +415,6 @@ export function App() {
           bestDev.capabilities.rgb_effects
         ) {
           fetchDeviceHwState(bestId, bestDev);
-          // Default to Effects/Devices smartly: if writable keyboard found, start in rgb or keep devices
-          setSection('rgb');
         }
       })
       .catch((err) => showToast(`${t.toasts.initErr}: ${err}`, true));
@@ -402,12 +491,42 @@ export function App() {
       }
     );
 
+    const unlistenHwState = listen<DeviceHardwareState>(
+      'sxmcaps://hardware-state',
+      (event) => {
+        setHwState(event.payload);
+      }
+    );
+
+    const unlistenLightFrame = listen<LightingPreviewFrame>(
+      'sxmcaps://lighting-frame',
+      (event) => {
+        setLightingFrame(event.payload);
+      }
+    );
+
     return () => {
       unlistenInput.then((fn) => fn());
       unlistenSettings.then((fn) => fn());
       unlistenWin.then((fn) => fn());
+      unlistenHwState.then((fn) => fn());
+      unlistenLightFrame.then((fn) => fn());
     };
   }, [recordWpmTick]);
+
+  // Refresh SxPerformance diagnostics cleanly while viewing Performance or while active
+  useEffect(() => {
+    if (section !== 'performance' && !sxPerfConfig.enabled) return;
+    const poll = window.setInterval(() => {
+      invoke<[SxPerformanceConfig, SxPerformanceDiagnostics]>('get_sxperformance_state')
+        .then(([cfg, diag]) => {
+          setSxPerfConfig(cfg);
+          setSxPerfDiag(diag);
+        })
+        .catch(() => {});
+    }, 1500);
+    return () => clearInterval(poll);
+  }, [section, sxPerfConfig.enabled]);
 
   // Decay WPM & refresh stats on stats tab
   useEffect(() => {
@@ -528,6 +647,7 @@ export function App() {
 
   const handleSelectDevice = (id: string) => {
     setActiveDeviceId(id);
+    invoke('set_watched_hardware_device', { deviceId: id }).catch(() => {});
     keymapLoadedDeviceRef.current = '';
     setKeymapLayer0([]);
     setKeymapLayer1([]);
@@ -588,6 +708,7 @@ export function App() {
         colorIdx,
       });
       setHwState(st);
+      setSxLightingStatus((prev) => ({ ...prev, active: false, hardware_streaming: false }));
     } catch (err) {
       showToast(normalizeError(err), true);
     } finally {
@@ -608,10 +729,122 @@ export function App() {
         brightness,
       });
       setHwState(st);
+      setSxLightingStatus((prev) => ({ ...prev, active: false, hardware_streaming: false }));
     } catch (err) {
       showToast(normalizeError(err), true);
     } finally {
       setHwBusy(false);
+    }
+  };
+
+  // --- SxLighting Handlers ---
+  const handleApplyCompositor = async (
+    preset: SxLightingPreset,
+    active: boolean,
+    streamHw: boolean
+  ) => {
+    try {
+      const st = await invoke<SxLightingStatus>('apply_sxlighting_config', {
+        preset,
+        active,
+        streamToHardware: streamHw,
+        deviceId: activeDeviceId || '',
+      });
+      setSxLightingStatus(st);
+    } catch (err) {
+      showToast(normalizeError(err), true);
+    }
+  };
+
+  const handleStopCompositor = async () => {
+    try {
+      const st = await invoke<SxLightingStatus>('stop_sxlighting');
+      setSxLightingStatus(st);
+      setLightingFrame(null);
+    } catch (err) {
+      showToast(normalizeError(err), true);
+    }
+  };
+
+  const handleSaveLightingPreset = async (preset: SxLightingPreset) => {
+    try {
+      const [st, list] = await invoke<[SxLightingStatus, SxLightingPreset[]]>(
+        'save_sxlighting_preset',
+        { preset }
+      );
+      setSxLightingStatus(st);
+      setSxLightingPresets(list);
+      showToast(`${preset.name} (.sxl)`);
+    } catch (err) {
+      showToast(normalizeError(err), true);
+    }
+  };
+
+  const handleDeleteLightingPreset = async (presetId: string) => {
+    try {
+      const list = await invoke<SxLightingPreset[]>('delete_sxlighting_preset', {
+        presetId,
+      });
+      setSxLightingPresets(list);
+    } catch (err) {
+      showToast(normalizeError(err), true);
+    }
+  };
+
+  const handleExportLightingPreset = async (preset: SxLightingPreset) => {
+    try {
+      const p = await invoke<string | null>('export_sxlighting_preset_file', {
+        preset,
+      });
+      if (p) showToast(p);
+    } catch (err) {
+      showToast(normalizeError(err), true);
+    }
+  };
+
+  const handleImportLightingPreset = async () => {
+    try {
+      const res = await invoke<[SxLightingPreset, SxLightingPreset[]] | null>(
+        'import_sxlighting_preset_file'
+      );
+      if (res) {
+        const [imported, list] = res;
+        setSxLightingPresets(list);
+        await handleApplyCompositor(
+          imported,
+          true,
+          Boolean(activeDevice?.capabilities.host_streaming)
+        );
+      }
+    } catch (err) {
+      showToast(normalizeError(err), true);
+    }
+  };
+
+  // --- SxPerformance Handlers ---
+  const handleUpdatePerfConfig = async (config: SxPerformanceConfig) => {
+    try {
+      const [cfg, diag] = await invoke<[SxPerformanceConfig, SxPerformanceDiagnostics]>(
+        'update_sxperformance_config',
+        { config }
+      );
+      setSxPerfConfig(cfg);
+      setSxPerfDiag(diag);
+    } catch (err) {
+      showToast(normalizeError(err), true);
+    }
+  };
+
+  const handleEmergencyBypass = async () => {
+    try {
+      const [cfg, diag] = await invoke<[SxPerformanceConfig, SxPerformanceDiagnostics]>(
+        'trigger_sxperformance_bypass'
+      );
+      setSxPerfConfig(cfg);
+      setSxPerfDiag(diag);
+      showToast(t.sxperf.emergencyBypass);
+    } catch (err) {
+      showToast(normalizeError(err), true);
     }
   };
 
@@ -1036,8 +1269,10 @@ export function App() {
     label: string;
     icon: typeof Cpu;
   }[] = [
+    { id: 'overview', label: t.nav.overview, icon: LayoutGrid },
     { id: 'devices', label: t.nav.devices, icon: Cpu },
-    { id: 'rgb', label: t.nav.rgb, icon: Sparkles },
+    { id: 'rgb', label: t.nav.rgb, icon: Layers },
+    { id: 'performance', label: t.nav.performance, icon: Gauge },
     { id: 'keys', label: t.nav.keys, icon: Keyboard },
     { id: 'macros', label: t.nav.macros, icon: Zap },
     { id: 'sound', label: t.nav.sound, icon: Volume2 },
@@ -1056,43 +1291,47 @@ export function App() {
     { id: 'studio', label: t.nav.studio, icon: Scissors },
   ];
 
+  const ActiveDevIcon =
+    activeDevice?.device_kind === 'mouse'
+      ? Mouse
+      : activeDevice?.device_kind === 'headset' || activeDevice?.device_kind === 'audio'
+      ? Headphones
+      : activeDevice?.device_kind === 'keyboard'
+      ? Keyboard
+      : Cpu;
+
+  const handleSmartNavigate = (tab: string) => {
+    if (tab === 'keyboard') {
+      setSoundTab('switches');
+      setSection('sound');
+    } else if (tab === 'mouse') {
+      setSoundTab('mouse');
+      setSection('sound');
+    } else if (tab === 'audio') {
+      setSoundTab('dsp');
+      setSection('sound');
+    } else {
+      setSection(tab as MainSection);
+    }
+  };
+
   return (
     <I18nProvider preference={settings.language}>
-      <div className="relative flex h-screen overflow-hidden bg-[#08070d] text-zinc-100 select-none">
-        {/* LORGAR Left Vertical Icon Rail */}
-        <aside className="flex w-[74px] shrink-0 flex-col items-center justify-between border-r border-purple-500/20 bg-[#0b0912] py-3">
-          {/* Hex SXB Brand Mark */}
+      <div className="relative flex h-screen overflow-hidden bg-[#050506] text-zinc-100 select-none">
+        {/* Monochrome Left Floating Icon Rail (Zero Left Borders/Stripes) */}
+        <aside className="flex w-[76px] shrink-0 flex-col items-center justify-between border-r border-white/8 bg-[#0a0a0c] py-3.5">
+          {/* SxmCaps Minimalist Brand Mark */}
           <button
             type="button"
-            onClick={() => setSection('devices')}
-            title="SxBoards Platform"
-            className="group relative flex h-11 w-11 cursor-pointer items-center justify-center"
+            onClick={() => setSection('overview')}
+            title="SxmCaps"
+            className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl bg-white text-black shadow-sm transition hover:scale-105"
           >
-            <svg
-              viewBox="0 0 40 40"
-              className="h-11 w-11 drop-shadow-[0_0_12px_rgba(168,85,247,0.55)]"
-            >
-              <defs>
-                <linearGradient id="sxbHexStroke" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#c084fc" />
-                  <stop offset="50%" stopColor="#9333ea" />
-                  <stop offset="100%" stopColor="#f472b6" />
-                </linearGradient>
-              </defs>
-              <polygon
-                points="20,2 36,11 36,29 20,38 4,29 4,11"
-                fill="#140f24"
-                stroke="url(#sxbHexStroke)"
-                strokeWidth="2.2"
-              />
-            </svg>
-            <span className="absolute text-[10px] font-black tracking-tighter text-white">
-              SXB
-            </span>
+            <span className="text-xs font-black tracking-tighter">SXM</span>
           </button>
 
-          {/* Vertical Navigation Icons */}
-          <nav className="flex w-full flex-col items-center gap-1 px-1.5">
+          {/* Vertical Pill Icon Rail */}
+          <nav className="flex w-full flex-col items-center gap-1.5 overflow-y-auto px-2 py-2">
             {railNav.map((item) => {
               const Icon = item.icon;
               const active = section === item.id;
@@ -1101,18 +1340,14 @@ export function App() {
                   key={item.id}
                   type="button"
                   onClick={() => setSection(item.id)}
-                  className={`relative flex w-full cursor-pointer flex-col items-center gap-1 rounded-xl py-2.5 text-[9px] font-bold tracking-wider uppercase transition ${
+                  title={item.label}
+                  className={`flex w-full cursor-pointer flex-col items-center gap-1 rounded-2xl py-2 text-[9px] font-semibold tracking-tight transition ${
                     active
-                      ? 'bg-purple-600/20 text-purple-200'
-                      : 'text-zinc-500 hover:bg-purple-500/10 hover:text-zinc-200'
+                      ? 'bg-white text-black'
+                      : 'text-zinc-500 hover:bg-white/6 hover:text-zinc-100'
                   }`}
                 >
-                  {active && (
-                    <span className="absolute top-2 bottom-2 left-0 w-[3px] rounded-r-full bg-purple-400 shadow-[0_0_10px_#a855f7]" />
-                  )}
-                  <Icon
-                    className={`h-4 w-4 ${active ? 'text-purple-300' : ''}`}
-                  />
+                  <Icon className="h-4 w-4" />
                   <span className="max-w-full truncate px-1">{item.label}</span>
                 </button>
               );
@@ -1125,9 +1360,9 @@ export function App() {
               type="button"
               onClick={handleCycleLanguage}
               title="Auto / Türkçe / English"
-              className="flex w-full cursor-pointer items-center justify-center gap-1 rounded-lg border border-purple-500/20 bg-[#140f24] py-1.5 text-[9px] font-bold text-purple-200 uppercase transition hover:border-purple-400"
+              className="flex w-full cursor-pointer items-center justify-center gap-1 rounded-full border border-white/12 bg-[#111114] py-1.5 text-[9px] font-bold text-zinc-200 uppercase transition hover:border-white/35"
             >
-              <Globe className="h-3 w-3 text-purple-400" />
+              <Globe className="h-3 w-3 text-white" />
               {(settings.language || 'auto').toUpperCase()}
             </button>
 
@@ -1137,10 +1372,10 @@ export function App() {
                 updateSettings({ ...settings, enabled: !settings.enabled })
               }
               title={settings.enabled ? t.soundOn : t.muted}
-              className={`flex h-9 w-full cursor-pointer items-center justify-center rounded-lg border transition ${
+              className={`flex h-9 w-full cursor-pointer items-center justify-center rounded-full border transition ${
                 settings.enabled
-                  ? 'border-purple-400 bg-purple-600 text-white shadow-[0_0_12px_rgba(147,51,234,0.45)]'
-                  : 'border-purple-500/25 bg-[#140f24] text-zinc-400 hover:text-white'
+                  ? 'border-white bg-white text-black'
+                  : 'border-white/15 bg-[#111114] text-zinc-400 hover:text-white'
               }`}
             >
               {settings.enabled ? (
@@ -1154,31 +1389,40 @@ export function App() {
 
         {/* Right Workspace Column */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* Top Preset & Hardware Toolbar (LORGAR Reference Style) */}
-          <header className="flex h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-purple-500/20 bg-[#0b0912] px-4">
-            {/* Active Hardware Device Selector + Global Status */}
+          {/* Top SxmCaps Pill Header & Preset Toolbar */}
+          <header className="flex h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/8 bg-[#0a0a0c] px-4">
             <div className="flex items-center gap-2.5">
-              <div className="flex items-center gap-2 rounded-lg border border-purple-500/25 bg-[#140f24] px-2.5 py-1.5">
+              <div className="hidden items-baseline gap-1.5 pr-1 sm:flex">
+                <span className="text-sm font-black tracking-tight text-white">
+                  SxmCaps
+                </span>
+                <span className="font-mono text-[10px] text-zinc-500">
+                  {appVersion}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-full border border-white/12 bg-[#111114] px-3 py-1.5">
                 <span
                   className={`h-2 w-2 rounded-full ${
                     activeDevice?.online && activeDevice?.permission_ok
-                      ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
+                      ? 'bg-emerald-400'
                       : activeDevice?.online
                         ? 'bg-amber-400'
                         : 'bg-zinc-600'
                   }`}
                 />
+                <ActiveDevIcon className="h-3.5 w-3.5 text-zinc-300" />
                 {devices.length > 0 ? (
                   <select
                     value={activeDeviceId}
                     onChange={(e) => handleSelectDevice(e.target.value)}
-                    className="max-w-[230px] cursor-pointer bg-transparent text-xs font-bold text-white outline-none"
+                    className="max-w-[210px] cursor-pointer bg-transparent text-xs font-bold text-white outline-none"
                   >
                     {devices.map((d) => (
                       <option
                         key={d.id}
                         value={d.id}
-                        className="bg-[#140f24] text-white"
+                        className="bg-[#111114] text-white"
                       >
                         {d.display_name} (
                         {d.link === 'wired'
@@ -1194,7 +1438,7 @@ export function App() {
                   </select>
                 ) : (
                   <span className="text-xs font-semibold text-zinc-300">
-                    SxBoards Virtual Deck
+                    SxmCaps Engine
                   </span>
                 )}
               </div>
@@ -1202,38 +1446,38 @@ export function App() {
               <button
                 type="button"
                 onClick={() => setSection(globalReady ? 'stats' : 'system')}
-                className={`hidden cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase sm:inline-flex ${
+                className={`hidden cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold tracking-wider uppercase sm:inline-flex ${
                   globalReady
-                    ? 'border-purple-500/30 bg-purple-500/10 text-purple-200'
-                    : 'border-purple-500/20 bg-[#140f24] text-zinc-400'
+                    ? 'border-white/15 bg-white/8 text-white'
+                    : 'border-white/10 bg-[#111114] text-zinc-400'
                 }`}
               >
-                <Activity className="h-3 w-3 text-purple-400" />
+                <Activity className="h-3 w-3" />
                 {globalReady
                   ? t.globalActive(inputStatus.active_devices.length)
                   : t.inWindow}
               </button>
 
               {wpm > 0 && (
-                <div className="hidden items-center gap-1 rounded-lg border border-purple-500/20 bg-[#140f24] px-2.5 py-1 font-mono text-[10px] font-bold text-purple-300 lg:flex">
+                <div className="hidden items-center gap-1 rounded-full border border-white/12 bg-[#111114] px-2.5 py-1 font-mono text-[10px] font-bold text-white tabular-nums lg:flex">
                   {wpm} WPM
                 </div>
               )}
             </div>
 
-            {/* Reference Preset Bar: Active Preset Selector + OVERWRITE PRESET + SAVE IN ACTIVE + NEW PRESET */}
+            {/* Preset Bar */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 rounded-lg border border-purple-500/25 bg-[#140f24] px-2 py-1">
+              <div className="flex items-center gap-1 rounded-full border border-white/12 bg-[#111114] px-3 py-1">
                 <select
                   value={activePreset?.id ?? ''}
                   onChange={(e) => handleSelectPreset(e.target.value)}
-                  className="max-w-[160px] cursor-pointer bg-transparent text-xs font-semibold text-purple-100 outline-none"
+                  className="max-w-[150px] cursor-pointer bg-transparent text-xs font-semibold text-white outline-none"
                 >
                   {workspace.presets.map((p) => (
                     <option
                       key={p.id}
                       value={p.id}
-                      className="bg-[#140f24] text-white"
+                      className="bg-[#111114] text-white"
                     >
                       {p.name}
                     </option>
@@ -1244,7 +1488,7 @@ export function App() {
                     type="button"
                     onClick={handleDeleteActivePreset}
                     title="Delete preset"
-                    className="cursor-pointer rounded p-0.5 text-zinc-500 hover:bg-purple-500/20 hover:text-rose-300"
+                    className="cursor-pointer rounded-full p-0.5 text-zinc-500 hover:bg-white/10 hover:text-rose-300"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -1254,18 +1498,18 @@ export function App() {
               <button
                 type="button"
                 onClick={handleOverwritePreset}
-                className="hidden cursor-pointer items-center gap-1.5 rounded-lg border border-purple-500/30 bg-[#151123] px-3 py-1.5 text-[10px] font-bold tracking-wider text-zinc-200 uppercase transition hover:border-purple-400 hover:bg-purple-500/15 hover:text-white xl:inline-flex"
+                className="hidden cursor-pointer items-center gap-1.5 rounded-full border border-white/15 bg-[#111114] px-3 py-1.5 text-[10px] font-bold tracking-wider text-zinc-200 uppercase transition hover:border-white/35 hover:text-white xl:inline-flex"
               >
-                <Save className="h-3 w-3 text-purple-400" />
+                <Save className="h-3 w-3" />
                 {t.presets.overwrite}
               </button>
 
               <button
                 type="button"
                 onClick={handleSaveInActivePreset}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-purple-500/30 bg-[#151123] px-3 py-1.5 text-[10px] font-bold tracking-wider text-zinc-200 uppercase transition hover:border-purple-400 hover:bg-purple-500/15 hover:text-white"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/15 bg-[#111114] px-3 py-1.5 text-[10px] font-bold tracking-wider text-zinc-200 uppercase transition hover:border-white/35 hover:text-white"
               >
-                <Save className="h-3 w-3 text-purple-400" />
+                <Save className="h-3 w-3" />
                 {t.presets.saveActive}
               </button>
 
@@ -1275,7 +1519,7 @@ export function App() {
                   setNewPresetName('');
                   setNewPresetModalOpen(true);
                 }}
-                className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-purple-600 px-3.5 py-1.5 text-[10px] font-extrabold tracking-wider text-white uppercase shadow-[0_0_16px_rgba(147,51,234,0.5)] transition hover:bg-purple-500"
+                className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-white px-3.5 py-1.5 text-[10px] font-extrabold tracking-wider text-black uppercase transition hover:bg-zinc-200"
               >
                 <Plus className="h-3.5 w-3.5" />
                 {t.presets.newPreset.replace(/^\+\s*/, '')}
@@ -1285,7 +1529,7 @@ export function App() {
 
           {/* Optional Linux Input Permission Notice */}
           {!globalReady && (
-            <div className="shrink-0 px-3.5 pt-2.5">
+            <div className="shrink-0 px-4 pt-3">
               <PermissionBanner
                 status={inputStatus}
                 onEnableUdev={handleEnableUdev}
@@ -1295,7 +1539,37 @@ export function App() {
           )}
 
           {/* Main Section Canvas */}
-          <main className="sxb-stage-bg min-h-0 flex-1 overflow-hidden p-3.5">
+          <main className="sxb-stage-bg min-h-0 flex-1 overflow-hidden p-4">
+            {section === 'overview' && (
+              <SxmOverviewDashboard
+                devices={devices}
+                selectedDevice={activeDevice}
+                hwState={hwState}
+                onSelectDevice={handleSelectDevice}
+                settings={settings}
+                soundpacks={soundpacks}
+                audioDevices={audioDevices}
+                stats={stats}
+                wpm={wpm}
+                pressedKeys={pressedKeys}
+                pressedMouseButtons={pressedMouse}
+                lastKeyLabel={lastKeyLabel}
+                sxLightingStatus={sxLightingStatus}
+                lightingFrame={lightingFrame}
+                sxPerfConfig={sxPerfConfig}
+                sxPerfDiag={sxPerfDiag}
+                onUpdateSettings={updateSettings}
+                onSoundKeyPress={handleTestKey}
+                onTestMouseButton={handleTestMouse}
+                onApplyLighting={handleApplyCompositor}
+                onTogglePerfEnabled={(enabled) =>
+                  handleUpdatePerfConfig({ ...sxPerfConfig, enabled })
+                }
+                onTriggerPerfBypass={handleEmergencyBypass}
+                onNavigateTab={handleSmartNavigate}
+              />
+            )}
+
             {section === 'devices' && (
               <SxBoardDevicesPanel
                 devices={devices}
@@ -1304,20 +1578,39 @@ export function App() {
                 onSelectDevice={handleSelectDevice}
                 onRescan={handleRescanHardware}
                 onInstallPermissions={handleEnableUdev}
-                onOpenBoardStudio={(tab) => setSection(tab)}
+                onOpenBoardStudio={handleSmartNavigate}
               />
             )}
 
             {section === 'rgb' && (
-              <SxBoardRgbPanel
-                device={activeDevice}
+              <SxLightingStudioPanel
+                selectedDevice={activeDevice}
                 hwState={hwState}
                 pressedKeys={pressedKeys}
-                loading={hwBusy}
+                sxLightingStatus={sxLightingStatus}
+                sxLightingPresets={sxLightingPresets}
+                lightingFrame={lightingFrame}
+                busy={hwBusy}
+                onApplyCompositor={handleApplyCompositor}
+                onStopCompositor={handleStopCompositor}
+                onSavePreset={handleSaveLightingPreset}
+                onDeletePreset={handleDeleteLightingPreset}
+                onExportPreset={handleExportLightingPreset}
+                onImportPreset={handleImportLightingPreset}
+                onSyncRead={() => fetchDeviceHwState(activeDeviceId)}
                 onApplyEffect={handleApplyRgbEffect}
                 onApplyPerKey={handleApplyPerKey}
                 onApplyFlags={handleApplyFlags}
-                onRefreshState={() => fetchDeviceHwState(activeDeviceId)}
+              />
+            )}
+
+            {section === 'performance' && (
+              <SxPerformancePanel
+                config={sxPerfConfig}
+                diagnostics={sxPerfDiag}
+                onUpdateConfig={handleUpdatePerfConfig}
+                onEmergencyBypass={handleEmergencyBypass}
+                onInstallRules={handleEnableUdev}
               />
             )}
 
@@ -1351,32 +1644,49 @@ export function App() {
 
             {section === 'sound' && (
               <div className="flex h-full flex-col gap-3 overflow-hidden">
-                {/* Interactive Hardware Deck synchronized with Sound Engine */}
                 <div className="shrink-0">
-                  <AulaF75BoardStage
-                    mode="sound"
-                    pressedKeys={pressedKeys}
-                    effectId={hwState?.effect_id ?? 3}
-                    brightness={hwState?.brightness ?? 10}
-                    speed={hwState?.speed ?? 3}
-                    colorIdx={hwState?.color_idx ?? 7}
-                    sideMode={hwState?.side_mode ?? 1}
-                    perKeyColors={hwState?.per_key_colors}
-                    deviceTitle={
-                      activeDevice?.display_name ??
-                      `SXB-F75 (${activeKbPack?.name ?? settings.active_keyboard_pack})`
-                    }
-                    badgeText={activeKbPack?.name ?? settings.active_keyboard_pack}
-                    wpm={wpm}
-                    lastKeyLabel={lastKeyLabel}
-                    showSandbox
-                    onSoundKeyPress={handleTestKey}
-                  />
+                  {activeDevice &&
+                  activeDevice.device_kind !== 'keyboard' ? (
+                    <DeviceSpecificNoticeCard
+                      device={activeDevice}
+                      settings={settings}
+                      soundpacks={soundpacks}
+                      audioDevices={audioDevices}
+                      pressedMouseButtons={pressedMouse}
+                      onUpdateSettings={updateSettings}
+                      onTestMouseButton={handleTestMouse}
+                      onNavigateTab={handleSmartNavigate}
+                    />
+                  ) : (
+                    <AulaF75BoardStage
+                      mode="sound"
+                      pressedKeys={pressedKeys}
+                      effectId={hwState?.effect_id ?? 3}
+                      brightness={hwState?.brightness ?? 8}
+                      speed={hwState?.speed ?? 3}
+                      colorIdx={hwState?.color_idx ?? 7}
+                      sideMode={hwState?.side_mode ?? 1}
+                      perKeyColors={hwState?.per_key_colors}
+                      liveFrame={
+                        sxLightingStatus.active ? lightingFrame?.matrix_rgb : null
+                      }
+                      liveSynced={Boolean(hwState?.raw_config_valid)}
+                      deviceTitle={
+                        activeDevice?.display_name ??
+                        `SxmCaps (${activeKbPack?.name ?? settings.active_keyboard_pack})`
+                      }
+                      badgeText={activeKbPack?.name ?? settings.active_keyboard_pack}
+                      wpm={wpm}
+                      lastKeyLabel={lastKeyLabel}
+                      showSandbox
+                      onSoundKeyPress={handleTestKey}
+                    />
+                  )}
                 </div>
 
                 {/* Unified Sound Engine Sub-navigation */}
                 <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
-                  <div className="flex items-center gap-1 rounded-xl border border-purple-500/20 bg-[#0b0912] p-1">
+                  <div className="flex items-center gap-1 rounded-full border border-white/10 bg-[#0b0b0d] p-1">
                     {soundSubTabs.map((st) => {
                       const Icon = st.icon;
                       const active = soundTab === st.id;
@@ -1385,10 +1695,10 @@ export function App() {
                           key={st.id}
                           type="button"
                           onClick={() => setSoundTab(st.id)}
-                          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
                             active
-                              ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(147,51,234,0.4)]'
-                              : 'text-zinc-400 hover:bg-purple-500/10 hover:text-white'
+                              ? 'bg-white text-black'
+                              : 'text-zinc-400 hover:text-white'
                           }`}
                         >
                           <Icon className="h-3.5 w-3.5" />
@@ -1398,9 +1708,9 @@ export function App() {
                     })}
                   </div>
 
-                  <div className="flex items-center gap-2 rounded-xl border border-purple-500/20 bg-[#0b0912] px-3 py-1.5 text-[11px] text-zinc-400">
-                    <Volume2 className="h-3.5 w-3.5 text-purple-400" />
-                    <span className="font-mono text-purple-200">
+                  <div className="flex items-center gap-2 rounded-full border border-white/10 bg-[#0b0b0d] px-3.5 py-1.5 text-[11px] text-zinc-400">
+                    <Volume2 className="h-3.5 w-3.5 text-white" />
+                    <span className="font-mono text-white tabular-nums">
                       {Math.round(settings.keyboard_volume * 100)}%
                     </span>
                     <input
@@ -1518,8 +1828,8 @@ export function App() {
 
         {/* Inline Modal: + NEW PRESET */}
         {newPresetModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs">
-            <div className="w-full max-w-sm rounded-2xl border border-purple-500/35 bg-[#120d1e] p-5 shadow-[0_0_40px_rgba(147,51,234,0.35)]">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs">
+            <div className="sxm-card w-full max-w-sm p-5 shadow-2xl">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-bold tracking-wider text-white uppercase">
                   {t.presets.newPreset}
@@ -1527,7 +1837,7 @@ export function App() {
                 <button
                   type="button"
                   onClick={() => setNewPresetModalOpen(false)}
-                  className="cursor-pointer rounded p-1 text-zinc-400 hover:bg-purple-500/20 hover:text-white"
+                  className="cursor-pointer rounded-full p-1 text-zinc-400 hover:bg-white/10 hover:text-white"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1545,20 +1855,20 @@ export function App() {
                   if (e.key === 'Escape') setNewPresetModalOpen(false);
                 }}
                 placeholder={t.presets.defaultName}
-                className="mb-4 w-full rounded-xl border border-purple-500/30 bg-[#090710] px-3 py-2 text-xs text-white outline-none focus:border-purple-400"
+                className="mb-4 w-full rounded-xl border border-white/15 bg-[#0b0b0d] px-3 py-2 text-xs text-white outline-none focus:border-white/40"
               />
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setNewPresetModalOpen(false)}
-                  className="cursor-pointer rounded-lg border border-purple-500/25 bg-[#19132b] px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:text-white"
+                  className="cursor-pointer rounded-full border border-white/15 bg-[#0b0b0d] px-3.5 py-1.5 text-xs font-semibold text-zinc-300 hover:text-white"
                 >
                   ✕
                 </button>
                 <button
                   type="button"
                   onClick={handleCreatePreset}
-                  className="cursor-pointer rounded-lg bg-purple-600 px-4 py-1.5 text-xs font-bold text-white shadow-[0_0_12px_rgba(147,51,234,0.45)] hover:bg-purple-500"
+                  className="cursor-pointer rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black hover:bg-zinc-200"
                 >
                   {t.presets.newPreset}
                 </button>
@@ -1567,13 +1877,13 @@ export function App() {
           </div>
         )}
 
-        {/* Toast Notification */}
+        {/* Monochrome Toast Notification */}
         {toast && (
           <div
-            className={`fixed right-5 bottom-4 z-50 rounded-xl border px-4 py-2 text-xs font-semibold shadow-2xl ${
+            className={`fixed right-5 bottom-4 z-50 rounded-full border px-4 py-2 text-xs font-semibold shadow-2xl ${
               toast.error
-                ? 'border-rose-400/50 bg-[#28121d] text-rose-100'
-                : 'border-purple-400/50 bg-[#171128] text-purple-100 shadow-[0_0_24px_rgba(147,51,234,0.4)]'
+                ? 'border-rose-400/50 bg-[#1a0d11] text-rose-100'
+                : 'border-white/25 bg-[#111114] text-white'
             }`}
           >
             {toast.msg}

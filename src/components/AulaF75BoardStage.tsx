@@ -101,7 +101,7 @@ const F75_VISUAL_ROWS: F75VisualKey[][] = [
     { matrixIndex: 5, label: 'CTRL', code: 'ControlLeft', width: 1.25, isMod: true },
     { matrixIndex: 11, label: 'WIN', code: 'MetaLeft', width: 1.25, isMod: true },
     { matrixIndex: 17, label: 'ALT', code: 'AltLeft', width: 1.25, isMod: true },
-    { matrixIndex: 35, label: 'SXBOARDS', code: 'Space', width: 6.25, isAccent: true },
+    { matrixIndex: 35, label: 'SXMCAPS', code: 'Space', width: 6.25, isAccent: true },
     { matrixIndex: 53, label: 'ALT', code: 'AltRight', width: 1, isMod: true },
     { matrixIndex: 59, label: 'FN', code: 'Fn', width: 1, isMod: true },
     { matrixIndex: 71, label: 'CTRL', code: 'ControlRight', width: 1, isMod: true },
@@ -112,14 +112,14 @@ const F75_VISUAL_ROWS: F75VisualKey[][] = [
 ];
 
 const PALETTE_RGB: [number, number, number][] = [
-  [239, 68, 68],   // Red
-  [34, 197, 94],   // Green
-  [59, 130, 246],  // Blue
-  [234, 179, 8],   // Yellow
-  [168, 85, 247],  // Violet / Purple
-  [6, 182, 212],   // Cyan
-  [244, 241, 255], // White
-  [168, 85, 247],  // Multicolor fallback
+  [239, 68, 68],
+  [34, 197, 94],
+  [59, 130, 246],
+  [234, 179, 8],
+  [244, 244, 245],
+  [6, 182, 212],
+  [255, 255, 255],
+  [228, 228, 231],
 ];
 
 interface AulaF75BoardStageProps {
@@ -128,17 +128,16 @@ interface AulaF75BoardStageProps {
   selectedMatrixIndex?: number | null;
   onSelectKey?: (key: F75VisualKey) => void;
   onSoundKeyPress?: (code: string, isDown: boolean) => void;
-  // Hardware visual state
   effectId?: number;
-  brightness?: number; // 0..9
-  speed?: number; // 0..4
-  colorIdx?: number; // 0..7
-  sideMode?: number; // 0..3
+  brightness?: number;
+  speed?: number;
+  colorIdx?: number;
+  sideMode?: number;
   perKeyColors?: [number, number, number][];
-  // Remap callouts
+  liveFrame?: [number, number, number][] | null;
+  liveSynced?: boolean;
   reassignedEntries?: KeymapEntryDto[];
   onResetKey?: (matrixIndex: number) => void;
-  // Header labels
   deviceTitle?: string;
   badgeText?: string;
   wpm?: number;
@@ -158,6 +157,8 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
   colorIdx = 7,
   sideMode = 1,
   perKeyColors = [],
+  liveFrame = null,
+  liveSynced = false,
   reassignedEntries = [],
   onResetKey,
   deviceTitle = 'AULA F75',
@@ -176,15 +177,15 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
   const prompts = t.kb.prompts;
   const activePrompt = prompts[promptIdx % prompts.length];
 
-  // Lightweight live RGB animation clock when in RGB or active effect preview
   useEffect(() => {
+    if (liveFrame && liveFrame.length > 0) return;
     if (effectId === 0 || effectId === 1 || effectId === 21) return;
     const intervalMs = Math.max(55, 130 - speed * 18);
     const id = setInterval(() => {
       setTick((n) => (n + 1) % 360);
     }, intervalMs);
     return () => clearInterval(id);
-  }, [effectId, speed]);
+  }, [effectId, speed, liveFrame]);
 
   useEffect(() => {
     const stopPaint = () => {
@@ -202,7 +203,17 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
     return map;
   }, [reassignedEntries]);
 
-  const computeLedColor = (key: F75VisualKey, rIdx: number, cIdx: number): [number, number, number] | null => {
+  const computeLedColor = (
+    key: F75VisualKey,
+    rIdx: number,
+    cIdx: number
+  ): [number, number, number] | null => {
+    if (liveFrame && liveFrame.length > 0) {
+      const px = liveFrame[key.matrixIndex];
+      if (!px || (px[0] === 0 && px[1] === 0 && px[2] === 0)) return null;
+      return px;
+    }
+
     if (effectId === 0) return null;
     const bFactor = Math.max(0.15, brightness / 9);
     if (effectId === 21) {
@@ -215,8 +226,14 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
       ];
     }
 
-    // Animated or fixed firmware preview
-    if (effectId === 3 || effectId === 6 || effectId === 13 || effectId === 15 || effectId === 16 || colorIdx === 7) {
+    if (
+      effectId === 3 ||
+      effectId === 6 ||
+      effectId === 13 ||
+      effectId === 15 ||
+      effectId === 16 ||
+      colorIdx === 7
+    ) {
       const hue = (tick * 6 + cIdx * 24 + rIdx * 14) % 360;
       const rad = (hue * Math.PI) / 180;
       const r = Math.round((127 + 120 * Math.cos(rad)) * bFactor);
@@ -225,7 +242,7 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
       return [r, g, b];
     }
 
-    const base = PALETTE_RGB[colorIdx] ?? [168, 85, 247];
+    const base = PALETTE_RGB[colorIdx] ?? [244, 244, 245];
     const pulse =
       effectId === 2
         ? 0.35 + 0.65 * (0.5 + 0.5 * Math.sin((tick * 8 * Math.PI) / 180))
@@ -273,36 +290,41 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
   const callouts = reassignedEntries.slice(0, 4);
 
   return (
-    <div className="sxb-stage-bg relative flex flex-col justify-between overflow-hidden rounded-2xl border border-purple-500/20 p-4 shadow-[0_24px_60px_rgba(0,0,0,0.65)]">
+    <div className="sxb-stage-bg relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/10 p-4 shadow-[0_24px_60px_rgba(0,0,0,0.65)]">
       {/* Top Bezel Info + Live Telemetry */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5">
         <div className="flex items-center gap-2.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-purple-400 shadow-[0_0_10px_#a855f7]" />
+          <span className="h-2 w-2 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.65)]" />
           <span className="text-xs font-bold tracking-[0.14em] text-white uppercase">
             {deviceTitle}
           </span>
           {badgeText && (
-            <span className="rounded-md border border-purple-400/25 bg-purple-500/15 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-purple-200 uppercase">
+            <span className="rounded-full border border-white/15 bg-white/8 px-2.5 py-0.5 text-[10px] font-semibold tracking-wider text-zinc-200 uppercase">
               {badgeText}
+            </span>
+          )}
+          {liveSynced && (
+            <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+              {t.sxb.liveSyncedBadge}
             </span>
           )}
         </div>
 
         <div className="flex items-center gap-2.5 text-xs text-zinc-400">
           {lastKeyLabel && (
-            <span className="rounded-md border border-purple-500/25 bg-[#120f1e] px-2 py-0.5 font-mono text-[11px] text-purple-200">
+            <span className="rounded-full border border-white/12 bg-black/50 px-2.5 py-0.5 font-mono text-[11px] text-white">
               {lastKeyLabel}
             </span>
           )}
-          <span className="font-mono text-[11px] text-zinc-400">
+          <span className="font-mono text-[11px] text-zinc-400 tabular-nums">
             <strong className="text-white">{wpm}</strong> WPM
           </span>
         </div>
       </div>
 
-      {/* Reference-style Reassigned Key Callout Pills Floating Above the Keyboard */}
+      {/* Reassigned Key Callout Pills */}
       {callouts.length > 0 && (
-        <div className="mb-3 flex flex-wrap items-center justify-center gap-2.5">
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
           {callouts.map((entry) => (
             <div
               key={entry.matrix_index}
@@ -311,18 +333,16 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
                 const found = flat.find((k) => k.matrixIndex === entry.matrix_index);
                 if (found) onSelectKey?.(found);
               }}
-              className="group flex cursor-pointer items-center gap-3 rounded-lg border border-purple-500/35 bg-[#120f1d]/95 px-3 py-1.5 shadow-[0_4px_18px_rgba(139,92,246,0.2)] transition hover:border-purple-400"
+              className="group flex cursor-pointer items-center gap-2.5 rounded-full border border-white/15 bg-[#121215] px-3 py-1 transition hover:border-white/35"
             >
-              <div className="flex h-6 min-w-[24px] items-center justify-center rounded border border-purple-400/30 bg-[#1b1630] px-1.5 font-mono text-[10px] font-bold text-white">
+              <div className="flex h-5 min-w-[22px] items-center justify-center rounded-full bg-white px-1.5 font-mono text-[10px] font-bold text-black">
                 {entry.key_label}
               </div>
-              <div className="text-left leading-tight">
-                <div className="text-[11px] font-bold text-white">
-                  {entry.assigned_label}
-                </div>
-                <div className="text-[9px] font-semibold tracking-wider text-purple-300 uppercase">
-                  REASSIGNED
-                </div>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <span className="font-semibold text-white">{entry.assigned_label}</span>
+                <span className="text-[9px] tracking-wider text-zinc-500 uppercase">
+                  REMAP
+                </span>
               </div>
               {onResetKey && (
                 <button
@@ -331,7 +351,7 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
                     e.stopPropagation();
                     onResetKey(entry.matrix_index);
                   }}
-                  className="ml-1 rounded p-0.5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                  className="rounded-full p-0.5 text-zinc-400 hover:bg-white/15 hover:text-white"
                   title={t.sxb.resetKey}
                 >
                   <X className="h-3 w-3" />
@@ -343,15 +363,15 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
       )}
 
       {/* Physical AULA F75 75% Chassis */}
-      <div className="relative mx-auto w-full max-w-[920px] rounded-2xl border border-purple-400/20 bg-[#0b0912] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_20px_50px_rgba(0,0,0,0.85)]">
-        {/* Left Vertical Side LED Ambient Strip (Physical feature next to Esc/Tab/Caps) */}
+      <div className="relative mx-auto w-full max-w-[920px] rounded-2xl border border-white/10 bg-[#08080a] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_20px_50px_rgba(0,0,0,0.85)]">
+        {/* Left Vertical Side LED Strip */}
         <div
           className={`absolute top-6 bottom-6 left-1.5 w-1 rounded-full transition-all duration-300 ${
             sideMode === 0
-              ? 'bg-zinc-800/40'
+              ? 'bg-zinc-800/50'
               : sideMode === 2
-              ? 'animate-pulse bg-gradient-to-b from-purple-400 via-fuchsia-400 to-purple-600 shadow-[0_0_12px_#a855f7]'
-              : 'bg-gradient-to-b from-purple-300 via-violet-500 to-fuchsia-600 shadow-[0_0_14px_#a855f7]'
+              ? 'animate-pulse bg-white shadow-[0_0_10px_rgba(255,255,255,0.65)]'
+              : 'bg-zinc-200 shadow-[0_0_12px_rgba(255,255,255,0.55)]'
           }`}
         />
 
@@ -387,35 +407,32 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
                         <div
                           className={`flex h-9 w-9 items-center justify-center rounded-full border-2 shadow-lg transition ${
                             isSelected
-                              ? 'border-purple-400 bg-gradient-to-br from-purple-700 to-[#191529] shadow-[0_0_16px_rgba(168,85,247,0.7)]'
-                              : 'border-zinc-500/70 bg-gradient-to-br from-zinc-700 via-zinc-900 to-black hover:border-purple-400/70'
+                              ? 'border-white bg-zinc-200 text-black shadow-[0_0_14px_rgba(255,255,255,0.55)]'
+                              : 'border-zinc-600 bg-gradient-to-br from-zinc-700 via-zinc-900 to-black text-zinc-200 hover:border-white/70'
                           }`}
                         >
-                          <RotateCw className="h-3.5 w-3.5 text-zinc-200" />
+                          <RotateCw className="h-3.5 w-3.5" />
                         </div>
                       </button>
                     </React.Fragment>
                   );
                 }
 
-                // Visual aesthetic matching the reference keyboard:
-                // Light pearl/white alphas, dark charcoal mods, rose-magenta accents OR glowing per-key RGB underglow!
                 let keyClasses = '';
                 if (mode === 'rgb') {
-                  keyClasses =
-                    'bg-[#171424] text-zinc-100 border-[#2e2747]';
+                  keyClasses = 'bg-[#121216] text-zinc-100 border-white/15';
                 } else if (key.isAccent) {
                   keyClasses = isPressed
-                    ? 'bg-purple-400 text-black border-white'
-                    : 'bg-gradient-to-b from-[#d91c5c] to-[#9f1239] text-white border-[#f43f5e]/60';
+                    ? 'bg-white text-black border-white'
+                    : 'bg-[#1f1f24] text-white border-white/25';
                 } else if (key.isMod) {
                   keyClasses = isPressed
-                    ? 'bg-purple-500 text-white border-purple-300'
-                    : 'bg-[#171522] text-zinc-300 border-[#2c2740]';
+                    ? 'bg-white text-black border-white'
+                    : 'bg-[#141418] text-zinc-300 border-white/12';
                 } else {
                   keyClasses = isPressed
-                    ? 'bg-purple-300 text-black border-white'
-                    : 'bg-[#ece8f6] text-[#171224] border-white/80';
+                    ? 'bg-zinc-900 text-white border-white'
+                    : 'bg-[#ededef] text-[#09090b] border-white/80';
                 }
 
                 return (
@@ -432,33 +449,33 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
                       style={{
                         flex: `${key.width} 1 0%`,
                         boxShadow: isPressed
-                          ? `0 1px 0 #09070f, 0 0 18px ${glowCss ?? '#a855f7'}`
+                          ? '0 1px 0 #050506, 0 0 14px rgba(255,255,255,0.65)'
                           : isSelected
-                          ? '0 3px 0 #4c1d95, 0 0 18px rgba(168, 85, 247, 0.75)'
+                          ? '0 3px 0 #050506, 0 0 14px rgba(255, 255, 255, 0.55)'
                           : glowCss
-                          ? `0 3px 0 #09070f, 0 0 10px ${glowCss}55, inset 0 -2px 6px ${glowCss}66`
-                          : '0 3px 0 #09070f, 0 4px 8px rgba(0,0,0,0.6)',
+                          ? `0 3px 0 #050506, 0 0 8px ${glowCss}44, inset 0 -2px 5px ${glowCss}55`
+                          : '0 3px 0 #050506, 0 4px 8px rgba(0,0,0,0.65)',
                         borderColor: isSelected
-                          ? '#c084fc'
+                          ? '#ffffff'
                           : isModified
-                          ? '#a855f7'
+                          ? '#e4e4e7'
                           : glowCss && mode === 'rgb'
                           ? glowCss
                           : undefined,
                         backgroundColor:
-                          mode === 'rgb' && glowCss && effectId !== 0
-                            ? `${glowCss}2b`
+                          mode === 'rgb' && glowCss && (liveFrame?.length || effectId !== 0)
+                            ? `${glowCss}28`
                             : undefined,
                         transform: isPressed ? 'translateY(2px)' : 'translateY(0px)',
                       }}
                       className={`relative flex h-9 cursor-pointer items-center justify-center rounded-md border text-[10px] font-bold tracking-wide transition-all duration-75 select-none ${keyClasses}`}
                     >
                       {isModified && (
-                        <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_#a855f7]" />
+                        <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-white" />
                       )}
                       <span className="truncate px-1">
                         {key.code === 'Space' ? (
-                          <span className="text-[9px] tracking-[0.26em] opacity-85">
+                          <span className="text-[9px] tracking-[0.26em] opacity-75">
                             {key.label}
                           </span>
                         ) : (
@@ -476,8 +493,8 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
 
       {/* Optional Interactive Typing Sandbox */}
       {showSandbox && (
-        <div className="mx-auto mt-3 flex w-full max-w-[920px] items-center gap-2.5 rounded-xl border border-purple-500/20 bg-[#0d0b16] px-3 py-1.5">
-          <Keyboard className="h-3.5 w-3.5 shrink-0 text-purple-400" />
+        <div className="mx-auto mt-3 flex w-full max-w-[920px] items-center gap-2.5 rounded-xl border border-white/10 bg-[#0b0b0d] px-3 py-1.5">
+          <Keyboard className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
           <input
             type="text"
             value={sandboxText}
@@ -492,7 +509,7 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
                 setSandboxText('');
                 setPromptIdx((i) => (i + 1) % prompts.length);
               }}
-              className="shrink-0 cursor-pointer rounded border border-purple-500/25 bg-purple-500/15 px-2 py-0.5 text-[11px] text-purple-200 hover:bg-purple-500/25"
+              className="shrink-0 cursor-pointer rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[11px] text-white hover:bg-white/20"
             >
               {t.kb.clear}
             </button>

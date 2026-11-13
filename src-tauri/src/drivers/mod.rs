@@ -11,8 +11,20 @@ use serde::{Deserialize, Serialize};
 pub enum DeviceKind {
     Keyboard,
     Mouse,
+    Headset,
     Audio,
     Peripheral,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum LightingCapability {
+    #[default]
+    None,
+    SingleColor,
+    ZoneRgb,
+    PerKeyHost,
+    FirmwarePresetOnly,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -29,6 +41,7 @@ pub enum ConnectionLink {
 pub struct DeviceCapabilities {
     pub rgb_effects: bool,
     pub per_key_rgb: bool,
+    pub host_streaming: bool,
     pub side_light: bool,
     pub knob_mode: bool,
     pub os_mode: bool,
@@ -39,7 +52,22 @@ pub struct DeviceCapabilities {
     pub macros: bool,
     pub battery_status: bool,
     pub sound_engine: bool,
+    pub communication_supported: bool,
     pub writable: bool,
+    pub lighting_mode: LightingCapability,
+    pub led_count: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LedTopologyNode {
+    pub index: usize,
+    pub matrix_index: usize,
+    pub label: String,
+    pub web_code: String,
+    pub x: f32,
+    pub y: f32,
+    pub zone: String,
+    pub is_modifier: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +144,7 @@ pub struct DeviceHardwareState {
     pub per_key_colors: Vec<[u8; 3]>,
     pub supported_effects: Vec<EffectMetaDto>,
     pub layout: Vec<KeyLayoutItemDto>,
+    pub topology: Vec<LedTopologyNode>,
     pub raw_config_valid: bool,
 }
 
@@ -123,6 +152,9 @@ pub trait PeripheralDriver: Send + Sync {
     fn driver_id(&self) -> &'static str;
     fn device_info(&self) -> HardwareDeviceInfo;
     fn read_state(&self) -> Result<DeviceHardwareState, String>;
+    /// Non-blocking / low-overhead hardware poll used to track physical FN key & knob edits.
+    fn poll_live_state(&self) -> Result<Option<DeviceHardwareState>, String>;
+    fn get_led_topology(&self) -> Vec<LedTopologyNode>;
     fn apply_rgb_effect(
         &self,
         effect_id: u8,
@@ -194,19 +226,25 @@ pub fn list_f75_remap_targets() -> Vec<RemapTargetDto> {
 pub fn install_sxboards_udev_rules() -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        let input_rule = r#"KERNEL=="event*", SUBSYSTEM=="input", TAG+="uaccess""#;
+        let input_rule = [
+            r#"KERNEL=="event*", SUBSYSTEM=="input", TAG+="uaccess""#,
+            r#"KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", TAG+="uaccess""#,
+        ]
+        .join("\n");
+
         let hid_rule = [
-            "# SxBoards Universal HID Access Rules",
+            "# SxmCaps & SxBoards Universal HID Access Rules",
             r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", MODE="0666", TAG+="uaccess""#,
             r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3554", ATTRS{idProduct}=="fa09", MODE="0666", TAG+="uaccess""#,
             r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3554", ATTRS{idProduct}=="fa08", MODE="0666", TAG+="uaccess""#,
             r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="04f3", ATTRS{idProduct}=="026e", MODE="0666", TAG+="uaccess""#,
+            r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}=="040b", ATTRS{idProduct}=="0897", MODE="0666", TAG+="uaccess""#,
         ]
         .join("\n");
 
         let cmd = format!(
             "printf '%s\\n' '{}' > /etc/udev/rules.d/65-sxmcaps-input.rules && printf '%s\\n' '{}' > /etc/udev/rules.d/70-sxboards-hid.rules && udevadm control --reload-rules && udevadm trigger",
-            input_rule,
+            input_rule.replace('\'', "'\\''"),
             hid_rule.replace('\'', "'\\''")
         );
 

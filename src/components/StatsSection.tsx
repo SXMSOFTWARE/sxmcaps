@@ -40,7 +40,6 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
     return { entries, max };
   }, [stats.daily]);
 
-  // SVG polyline + area coordinates for the LORGAR-style glowing purple activity curve
   const curveSvg = useMemo(() => {
     const entries = dailySeries.entries;
     if (entries.length === 0) return null;
@@ -69,46 +68,46 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
   }, [dailySeries]);
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
-      {/* LORGAR KPI Summary Strip */}
+    <div className="flex h-full flex-col gap-3.5 overflow-y-auto pr-1">
+      {/* KPI Bento Strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-purple-500/20 bg-[#100d1a] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-          <div className="flex items-center justify-between text-[10px] font-bold tracking-widest text-zinc-400 uppercase">
+        <div className="sxm-card p-4">
+          <div className="flex items-center justify-between text-[10px] font-bold tracking-widest text-zinc-500 uppercase">
             <span>{t.stats.totalKeys}</span>
-            <Activity className="h-3.5 w-3.5 text-purple-400" />
+            <Activity className="h-3.5 w-3.5 text-white" />
           </div>
-          <div className="mt-1.5 font-mono text-2xl font-extrabold tracking-tight text-white">
+          <div className="mt-1.5 font-mono text-2xl font-extrabold tracking-tight text-white tabular-nums">
             {stats.total_keystrokes.toLocaleString(t.locale)}
           </div>
         </div>
 
-        <div className="rounded-xl border border-purple-500/20 bg-[#100d1a] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-          <div className="flex items-center justify-between text-[10px] font-bold tracking-widest text-zinc-400 uppercase">
+        <div className="sxm-card p-4">
+          <div className="flex items-center justify-between text-[10px] font-bold tracking-widest text-zinc-500 uppercase">
             <span>{t.stats.mouseClicks}</span>
-            <Mouse className="h-3.5 w-3.5 text-purple-400" />
+            <Mouse className="h-3.5 w-3.5 text-white" />
           </div>
-          <div className="mt-1.5 font-mono text-2xl font-extrabold tracking-tight text-white">
+          <div className="mt-1.5 font-mono text-2xl font-extrabold tracking-tight text-white tabular-nums">
             {stats.total_mouse_clicks.toLocaleString(t.locale)}
           </div>
         </div>
 
-        <div className="rounded-xl border border-purple-500/20 bg-[#100d1a] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-          <div className="flex items-center justify-between text-[10px] font-bold tracking-widest text-zinc-400 uppercase">
+        <div className="sxm-card p-4">
+          <div className="flex items-center justify-between text-[10px] font-bold tracking-widest text-zinc-500 uppercase">
             <span>{t.stats.peakSpeed}</span>
-            <Trophy className="h-3.5 w-3.5 text-purple-400" />
+            <Trophy className="h-3.5 w-3.5 text-white" />
           </div>
-          <div className="mt-1.5 font-mono text-2xl font-extrabold tracking-tight text-white">
+          <div className="mt-1.5 font-mono text-2xl font-extrabold tracking-tight text-white tabular-nums">
             {stats.peak_wpm}{' '}
-            <span className="text-xs font-semibold text-purple-300/80">WPM</span>
+            <span className="text-xs font-semibold text-zinc-400">WPM</span>
           </div>
         </div>
 
-        <div className="flex items-center justify-between rounded-xl border border-purple-500/20 bg-[#100d1a] p-3.5">
+        <div className="sxm-card flex items-center justify-between p-4">
           <div className="min-w-0">
-            <div className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">
+            <div className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">
               {t.stats.topKey}
             </div>
-            <div className="mt-1.5 truncate font-mono text-lg font-extrabold text-purple-200">
+            <div className="mt-1.5 truncate font-mono text-lg font-extrabold text-white">
               {topKeys[0]?.[0] ?? '—'}
             </div>
           </div>
@@ -117,7 +116,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
             type="button"
             onClick={onResetStats}
             title={t.stats.resetTitle}
-            className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-purple-200 transition hover:border-purple-400 hover:bg-purple-600 hover:text-white"
+            className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-zinc-200 transition hover:bg-white hover:text-black"
           >
             <RotateCcw className="h-3 w-3" />
             {t.stats.resetBtn}
@@ -125,16 +124,15 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
         </div>
       </div>
 
-      {/* Violet Analytics Charts Row: Vertical Bar Columns + Glowing Spline Curve */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {/* Neon Violet Vertical Bar Chart */}
-        <div className="rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4">
+      {/* Monochrome Charts Row */}
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
+        <div className="sxm-card p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-zinc-200 uppercase">
-              <BarChart3 className="h-3.5 w-3.5 text-purple-400" />
+              <BarChart3 className="h-3.5 w-3.5 text-white" />
               {t.stats.dailyTitle}
             </div>
-            <span className="rounded-md bg-purple-500/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-purple-300">
+            <span className="rounded-full border border-white/12 bg-white/5 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-zinc-300">
               14D
             </span>
           </div>
@@ -153,15 +151,14 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
                     title={`${date}: ${count.toLocaleString(t.locale)} ${t.stats.hits}`}
                     className="group flex flex-1 flex-col items-center gap-1.5"
                   >
-                    <div className="flex h-24 w-full items-end overflow-hidden rounded-md bg-[#161224] p-0.5">
+                    <div className="flex h-24 w-full items-end overflow-hidden rounded-lg bg-[#0b0b0d] p-0.5">
                       <div
                         style={{
                           height: `${h}%`,
                           background:
-                            'linear-gradient(to top, #6b21a8 0%, #9333ea 55%, #c084fc 100%)',
-                          boxShadow: '0 0 14px rgba(168,85,247,0.45)',
+                            'linear-gradient(to top, #3f3f46 0%, #a1a1aa 55%, #ffffff 100%)',
                         }}
-                        className="w-full rounded-sm transition-all group-hover:brightness-125"
+                        className="w-full rounded-sm transition-all group-hover:brightness-110"
                       />
                     </div>
                     <span className="font-mono text-[9px] text-zinc-500">
@@ -174,14 +171,14 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
           )}
         </div>
 
-        {/* Glowing Violet Trend Curve */}
-        <div className="rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4">
+        {/* Crisp Monochrome Trend Curve */}
+        <div className="sxm-card p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-zinc-200 uppercase">
-              <TrendingUp className="h-3.5 w-3.5 text-purple-400" />
+              <TrendingUp className="h-3.5 w-3.5 text-white" />
               {t.stats.dailyTitle}
             </div>
-            <span className="font-mono text-[10px] text-purple-300">
+            <span className="font-mono text-[10px] text-white tabular-nums">
               {dailySeries.entries[dailySeries.entries.length - 1]?.[1].toLocaleString(
                 t.locale
               ) ?? '0'}{' '}
@@ -194,24 +191,17 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
               {t.stats.dailyEmpty}
             </div>
           ) : (
-            <div className="h-32 w-full rounded-xl border border-purple-500/10 bg-[#0c0914] p-2">
+            <div className="h-32 w-full rounded-xl border border-white/8 bg-[#0b0b0d] p-2">
               <svg
                 viewBox={`0 0 ${curveSvg.width} ${curveSvg.height}`}
                 className="h-full w-full overflow-visible"
                 preserveAspectRatio="none"
               >
                 <defs>
-                  <linearGradient id="sxbAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#a855f7" stopOpacity="0.4" />
-                    <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
+                  <linearGradient id="sxmAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.28" />
+                    <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
                   </linearGradient>
-                  <filter id="sxbGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="2.5" result="blur" />
-                    <feMerge>
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
                 </defs>
 
                 {[0.25, 0.5, 0.75].map((frac) => (
@@ -221,18 +211,17 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
                     x2={curveSvg.width - 10}
                     y1={curveSvg.height * frac}
                     y2={curveSvg.height * frac}
-                    stroke="rgba(168,85,247,0.12)"
+                    stroke="rgba(255,255,255,0.08)"
                     strokeDasharray="3 4"
                   />
                 ))}
 
-                <path d={curveSvg.areaPath} fill="url(#sxbAreaGrad)" />
+                <path d={curveSvg.areaPath} fill="url(#sxmAreaGrad)" />
                 <path
                   d={curveSvg.linePath}
                   fill="none"
-                  stroke="#a855f7"
-                  strokeWidth="2.4"
-                  filter="url(#sxbGlow)"
+                  stroke="#ffffff"
+                  strokeWidth="2.2"
                 />
                 {curveSvg.points.map((pt) => (
                   <circle
@@ -240,8 +229,8 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
                     cx={pt.x}
                     cy={pt.y}
                     r="3.2"
-                    fill="#e9d5ff"
-                    stroke="#9333ea"
+                    fill="#ffffff"
+                    stroke="#050506"
                     strokeWidth="1.5"
                   >
                     <title>{`${pt.date}: ${pt.count.toLocaleString(t.locale)} ${t.stats.hits}`}</title>
@@ -253,25 +242,24 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
         </div>
       </div>
 
-      {/* Bottom Row: Keycap Violet Heatmap + Most Pressed Keys */}
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        {/* Violet Keycap Heatmap */}
-        <div className="rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4 xl:col-span-2">
+      {/* Bottom Row: Monochrome Heatmap + Top Pressed Pill Bars */}
+      <div className="grid grid-cols-1 gap-3.5 xl:grid-cols-3">
+        <div className="sxm-card p-4 xl:col-span-2">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-zinc-200 uppercase">
-              <Flame className="h-3.5 w-3.5 text-purple-400" />
+              <Flame className="h-3.5 w-3.5 text-white" />
               {t.stats.heatmapTitle}
             </div>
             <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
               <span>{t.stats.less}</span>
-              <span className="h-2.5 w-4 rounded-xs border border-purple-500/20 bg-[#161224]" />
-              <span className="h-2.5 w-4 rounded-xs bg-[#6b21a8]" />
-              <span className="h-2.5 w-4 rounded-xs bg-[#c084fc]" />
+              <span className="h-2.5 w-4 rounded-xs border border-white/10 bg-[#141418]" />
+              <span className="h-2.5 w-4 rounded-xs bg-zinc-600" />
+              <span className="h-2.5 w-4 rounded-xs bg-white" />
               <span>{t.stats.more}</span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-purple-500/15 bg-[#090710] p-2.5">
+          <div className="rounded-xl border border-white/8 bg-[#09090b] p-2.5">
             <div className="flex flex-col gap-1">
               {KEYBOARD_ROWS.map((row, rIdx) => (
                 <div key={rIdx} className="flex w-full gap-1">
@@ -282,15 +270,15 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
 
                     const bg =
                       hits === 0
-                        ? '#161224'
+                        ? '#141418'
                         : ratio > 0.65
-                          ? '#c084fc'
+                          ? '#ffffff'
                           : ratio > 0.35
-                            ? '#9333ea'
+                            ? '#a1a1aa'
                             : ratio > 0.12
-                              ? '#581c87'
-                              : '#2e1065';
-                    const fg = ratio > 0.65 && hits > 0 ? '#0b0714' : '#f3e8ff';
+                              ? '#52525b'
+                              : '#27272a';
+                    const fg = ratio > 0.35 && hits > 0 ? '#050506' : '#f4f4f5';
 
                     return (
                       <div
@@ -300,12 +288,8 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
                           flex: `${flexGrow} 1 0%`,
                           backgroundColor: bg,
                           color: fg,
-                          boxShadow:
-                            ratio > 0.65 && hits > 0
-                              ? '0 0 10px rgba(192,132,252,0.55)'
-                              : undefined,
                         }}
-                        className="flex h-7 items-center justify-center rounded border border-purple-400/15 text-[10px] font-semibold"
+                        className="flex h-7 items-center justify-center rounded border border-white/8 text-[10px] font-semibold"
                       >
                         <span className="truncate px-1">
                           {hits > 0 ? `${key.label}·${hits}` : key.label}
@@ -319,10 +303,9 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
           </div>
         </div>
 
-        {/* Most Pressed Keys */}
-        <div className="rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4">
+        <div className="sxm-card p-4">
           <div className="mb-3 flex items-center gap-2 text-xs font-bold tracking-wider text-zinc-200 uppercase">
-            <BarChart3 className="h-3.5 w-3.5 text-purple-400" />
+            <BarChart3 className="h-3.5 w-3.5 text-white" />
             {t.stats.mostPressed}
           </div>
           {topKeys.length === 0 ? (
@@ -332,25 +315,21 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
           ) : (
             <div className="space-y-2.5">
               {topKeys.map(([code, count]) => {
-                const pct = Math.max(4, Math.round((count / maxKeyCount) * 100));
+                const pct = Math.max(8, Math.round((count / maxKeyCount) * 100));
                 return (
                   <div key={code} className="space-y-1 text-[11px]">
                     <div className="flex items-center justify-between">
                       <span className="truncate font-mono text-zinc-300">
                         {code}
                       </span>
-                      <span className="font-mono font-semibold text-purple-200">
+                      <span className="font-mono font-semibold text-white tabular-nums">
                         {count.toLocaleString(t.locale)}
                       </span>
                     </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#1a152b]">
+                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#1a1a1f]">
                       <div
-                        style={{
-                          width: `${pct}%`,
-                          background:
-                            'linear-gradient(to right, #7e22ce, #c084fc)',
-                        }}
-                        className="h-full rounded-full"
+                        style={{ width: `${pct}%` }}
+                        className="h-full rounded-full bg-white"
                       />
                     </div>
                   </div>

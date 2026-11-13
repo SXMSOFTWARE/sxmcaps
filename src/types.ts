@@ -20,7 +20,6 @@ export interface AppSettings {
   stereo_pan: boolean;
   minimize_to_tray: boolean;
   audio_device: string | null;
-  // v0.2 DSP
   plate_preset: 'neutral' | 'aluminum' | 'polycarbonate' | 'brass' | string;
   tape_mod: boolean;
   poron_foam: boolean;
@@ -28,11 +27,9 @@ export interface AppSettings {
   eq_mid_db: number;
   eq_high_db: number;
   room_ambience: number;
-  // v0.2 Profiles & Autostart
   profiles_enabled: boolean;
   app_profiles: AppProfileRule[];
   autostart: boolean;
-  // v0.2.1 Localization ("auto" | "tr" | "en")
   language: string;
 }
 
@@ -116,12 +113,14 @@ export interface UpdateCheckResult {
   notes: string;
 }
 
-export type DeviceKind = 'keyboard' | 'mouse' | 'audio' | 'peripheral';
+export type DeviceKind = 'keyboard' | 'mouse' | 'headset' | 'audio' | 'peripheral';
+export type LightingCapability = 'none' | 'single_color' | 'zone_rgb' | 'per_key_host' | 'firmware_preset_only';
 export type ConnectionLink = 'wired' | 'wireless_24g' | 'bluetooth' | 'usb_hid';
 
 export interface DeviceCapabilities {
   rgb_effects: boolean;
   per_key_rgb: boolean;
+  host_streaming: boolean;
   side_light: boolean;
   knob_mode: boolean;
   os_mode: boolean;
@@ -132,7 +131,21 @@ export interface DeviceCapabilities {
   macros: boolean;
   battery_status: boolean;
   sound_engine: boolean;
+  communication_supported: boolean;
   writable: boolean;
+  lighting_mode: LightingCapability;
+  led_count: number;
+}
+
+export interface LedTopologyNode {
+  index: number;
+  matrix_index: number;
+  label: string;
+  web_code: string;
+  x: number;
+  y: number;
+  zone: string;
+  is_modifier: boolean;
 }
 
 export interface HardwareDeviceInfo {
@@ -203,6 +216,7 @@ export interface DeviceHardwareState {
   per_key_colors: [number, number, number][];
   supported_effects: EffectMetaDto[];
   layout: KeyLayoutItemDto[];
+  topology: LedTopologyNode[];
   raw_config_valid: boolean;
 }
 
@@ -245,6 +259,134 @@ export interface SxBoardWorkspaceStore {
   macros: SxBoardMacro[];
 }
 
+// --- SxLighting DTOs ---
+export type AnimationKind =
+  | 'solid_color'
+  | 'multi_color_gradient'
+  | 'wasd_highlight'
+  | 'rainbow_wave'
+  | 'color_cycle'
+  | 'breathing'
+  | 'spiral'
+  | 'aurora'
+  | 'matrix_rain'
+  | 'circular_wave'
+  | 'gradient_flow'
+  | 'plasma'
+  | 'fire'
+  | 'meteor_trail'
+  | 'key_press_flash'
+  | 'key_release_flash'
+  | 'ripple'
+  | 'multi_key_ripple'
+  | 'typing_heatmap'
+  | 'reactive_gradient'
+  | 'audio_bass_pulse'
+  | 'audio_spectrum'
+  | 'audio_waveform'
+  | 'audio_beat_flash';
+
+export type LayerBlendMode = 'normal' | 'additive' | 'screen' | 'maximum' | 'multiply';
+export type WaveDirection = 'left_to_right' | 'right_to_left' | 'top_to_bottom' | 'radial_out';
+
+export interface SxLightingLayer {
+  id: string;
+  name: string;
+  enabled: boolean;
+  effect: AnimationKind;
+  palette: [number, number, number][];
+  opacity: number;
+  speed: number;
+  scale: number;
+  blend_mode: LayerBlendMode;
+  direction: WaveDirection;
+  zone_filter: string;
+}
+
+export interface SxLightingPreset {
+  magic: string;
+  version: number;
+  id: string;
+  name: string;
+  author: string;
+  description: string;
+  fps: number;
+  max_brightness: number;
+  layers: SxLightingLayer[];
+}
+
+export interface SxLightingStatus {
+  active: boolean;
+  hardware_streaming: boolean;
+  target_device_id: string;
+  actual_fps: number;
+  frames_sent: number;
+  frames_deduped: number;
+  last_error: string | null;
+  active_preset: SxLightingPreset;
+}
+
+export interface LightingPreviewFrame {
+  preset_id: string;
+  matrix_rgb: [number, number, number][];
+  audio_peak: number;
+}
+
+// --- SxPerformance DTOs ---
+export type SocdMode = 'off' | 'last_input' | 'first_input' | 'neutral';
+
+export interface SocdPair {
+  key_a: string;
+  key_b: string;
+}
+
+export interface ModTapRule {
+  trigger_key: string;
+  tap_key: string;
+  hold_key: string;
+  threshold_ms: number;
+  enabled: boolean;
+}
+
+export interface TapDanceRule {
+  trigger_key: string;
+  single_key: string;
+  double_key: string;
+  window_ms: number;
+  enabled: boolean;
+}
+
+export interface SxPerformanceConfig {
+  enabled: boolean;
+  socd_mode: SocdMode;
+  socd_pairs: SocdPair[];
+  mod_taps: ModTapRule[];
+  tap_dances: TapDanceRule[];
+  one_shot_mods: string[];
+  key_remaps: Record<string, string>;
+  emergency_bypass_key: string;
+  bypass_on_unsupported_game: boolean;
+}
+
+export interface SxPerformanceDiagnostics {
+  enabled: boolean;
+  uinput_ready: boolean;
+  virtual_pipeline_active: boolean;
+  grabbed_devices: string[];
+  events_processed: number;
+  socd_resolutions: number;
+  mod_tap_triggers: number;
+  dropped_events: number;
+  reconnect_count: number;
+  events_per_sec: number;
+  last_proc_us: number;
+  avg_proc_us: number;
+  p95_proc_us: number;
+  max_proc_us: number;
+  last_error: string | null;
+  latency_disclaimer: string;
+}
+
 export interface InitialStateDto {
   settings: AppSettings;
   soundpacks: SoundpackInfo[];
@@ -256,6 +398,10 @@ export interface InitialStateDto {
   devices: HardwareDeviceInfo[];
   remap_targets: RemapTargetDto[];
   workspace: SxBoardWorkspaceStore;
+  sxlighting_status: SxLightingStatus;
+  sxlighting_presets: SxLightingPreset[];
+  sxperformance_config: SxPerformanceConfig;
+  sxperformance_diagnostics: SxPerformanceDiagnostics;
 }
 
 export interface UiInputEvent {

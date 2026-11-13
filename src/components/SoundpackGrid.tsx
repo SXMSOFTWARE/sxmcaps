@@ -135,17 +135,17 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
   };
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4 shadow-xl">
+    <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-[#111114] p-4 shadow-xl">
       {/* Top Toolbar: Local vs Pack Hub + Search */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex items-center gap-1 rounded-lg border border-purple-500/20 bg-[#0a0812] p-1">
+        <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-[#0b0b0d] p-1">
           <button
             type="button"
             onClick={() => setViewMode('local')}
             className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition ${
               viewMode === 'local'
-                ? 'bg-purple-600 text-white'
-                : 'text-zinc-400 hover:text-white'
+                ? 'bg-white text-black font-bold'
+                : 'text-zinc-400 hover:text-black'
             }`}
           >
             <Package className="h-3.5 w-3.5" />
@@ -156,8 +156,8 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
             onClick={() => setViewMode('hub')}
             className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition ${
               viewMode === 'hub'
-                ? 'bg-purple-600 text-white'
-                : 'text-zinc-400 hover:text-white'
+                ? 'bg-white text-black font-bold'
+                : 'text-zinc-400 hover:text-black'
             }`}
           >
             <Globe className="h-3.5 w-3.5" />
@@ -177,8 +177,8 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                   onClick={() => setCategory(c.id)}
                   className={`cursor-pointer rounded-md border px-2 py-1 text-[11px] font-medium transition ${
                     active
-                      ? 'border-purple-400 bg-purple-600 text-white shadow-[0_0_12px_rgba(147,51,234,0.35)]'
-                      : 'border-purple-500/20 bg-[#161224] text-zinc-400 hover:border-purple-400/25 hover:text-white'
+                      ? 'border-white bg-white text-black font-bold shadow-none'
+                      : 'border-white/10 bg-[#16161a] text-zinc-400 hover:border-white/25 hover:text-black'
                   }`}
                 >
                   {label}
@@ -188,7 +188,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
           </div>
         )}
 
-        <div className="flex w-full items-center gap-2 rounded-lg border border-purple-500/20 bg-[#0a0812] px-2.5 py-1.5 sm:w-52">
+        <div className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-[#0b0b0d] px-2.5 py-1.5 sm:w-52">
           <Search className="h-3.5 w-3.5 text-zinc-500" />
           <input
             type="text"
@@ -210,8 +210,8 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                 onClick={() => onSelectKeyboard(pack.id)}
                 className={`group flex cursor-pointer flex-col justify-between rounded-xl border p-3.5 transition ${
                   isActive
-                    ? 'border-purple-400 bg-purple-500/15 shadow-[0_0_24px_rgba(147,51,234,0.22)]'
-                    : 'border-purple-500/20 bg-[#151123] hover:border-purple-400/30 hover:bg-[#1c1630]'
+                    ? 'border-white bg-white/10 shadow-none'
+                    : 'border-white/10 bg-[#16161a] hover:border-white/25 hover:bg-[#1c1630]'
                 }`}
               >
                 <div>
@@ -220,8 +220,8 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                       <span
                         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                           isActive
-                            ? 'border-purple-400 bg-purple-600 text-white shadow-[0_0_12px_rgba(147,51,234,0.35)]'
-                            : 'border-purple-500/30 bg-[#090710]/80'
+                            ? 'border-white bg-white text-black font-bold shadow-none'
+                            : 'border-white/15 bg-[#0b0b0d]/80'
                         }`}
                       >
                         {isActive && <Check className="h-3 w-3 stroke-[3]" />}
@@ -234,8 +234,8 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                     <span
                       className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
                         isActive
-                          ? 'bg-purple-600 text-white'
-                          : 'border border-purple-500/25 bg-purple-500/10 text-zinc-300'
+                          ? 'bg-white text-black font-bold'
+                          : 'border border-white/12 bg-white/6 text-zinc-300'
                       }`}
                     >
                       {pack.tag}
@@ -247,12 +247,12 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                   </p>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between border-t border-purple-500/10 pt-2.5">
+                <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-2.5">
                   <span className="flex items-center gap-1.5 text-[10px] text-zinc-500">
                     <Package className="h-3 w-3" />
                     {pack.is_builtin ? t.packs.builtin : pack.format}
                     {!pack.is_builtin && (
-                      <span className="rounded border border-purple-500/25 bg-purple-500/15 px-1.5 py-0.2 text-[9px] font-semibold text-zinc-200">
+                      <span className="rounded border border-white/12 bg-white/10 px-1.5 py-0.2 text-[9px] font-semibold text-zinc-200">
                         {t.packs.installedBadge}
                       </span>
                     )}
@@ -268,7 +268,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                             onExportZip(pack.id);
                           }}
                           title={t.packs.exportZipTitle}
-                          className="cursor-pointer rounded p-1 text-zinc-400 transition hover:bg-purple-500/20 hover:text-white"
+                          className="cursor-pointer rounded p-1 text-zinc-400 transition hover:bg-white/12 hover:text-white"
                         >
                           <Download className="h-3.5 w-3.5" />
                         </button>
@@ -279,7 +279,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                             onDeleteCustom(pack.id);
                           }}
                           title={t.packs.deleteTitle}
-                          className="cursor-pointer rounded p-1 text-zinc-500 transition hover:bg-purple-500/20 hover:text-white"
+                          className="cursor-pointer rounded p-1 text-zinc-500 transition hover:bg-white/12 hover:text-white"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -292,7 +292,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                         e.stopPropagation();
                         onPreview(pack.id);
                       }}
-                      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-purple-500/25 bg-purple-500/15 px-2.5 py-1 text-[11px] font-medium text-zinc-100 transition hover:border-purple-400 hover:bg-purple-600 hover:text-white"
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white/12 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-zinc-100 transition hover:border-white hover:bg-white hover:text-black"
                     >
                       <Play className="h-3 w-3 fill-current" />
                       {t.packs.test}
@@ -312,7 +312,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
           {/* Custom URL Zip Installer */}
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-purple-500/20 bg-[#0a0812] p-2.5">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-[#0b0b0d] p-2.5">
             <Link className="h-4 w-4 shrink-0 text-zinc-400" />
             <input
               type="text"
@@ -325,7 +325,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
               type="button"
               disabled={!customUrl.trim() || installingId === 'custom-url'}
               onClick={() => handleInstall('custom-url', customUrl.trim())}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-purple-500 disabled:opacity-40"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-white text-black px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-zinc-200 disabled:opacity-40"
             >
               <CloudDownload className="h-3.5 w-3.5" />
               {installingId === 'custom-url'
@@ -348,14 +348,14 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                 return (
                   <div
                     key={entry.id}
-                    className="flex flex-col justify-between rounded-xl border border-purple-500/20 bg-[#151123] p-3.5"
+                    className="flex flex-col justify-between rounded-xl border border-white/10 bg-[#16161a] p-3.5"
                   >
                     <div>
                       <div className="mb-1 flex items-center justify-between gap-2">
                         <span className="text-sm font-semibold text-white">
                           {entry.name}
                         </span>
-                        <span className="rounded border border-purple-500/25 bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300 uppercase">
+                        <span className="rounded border border-white/12 bg-white/6 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300 uppercase">
                           {entry.tag}
                         </span>
                       </div>
@@ -364,7 +364,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                       </p>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between border-t border-purple-500/10 pt-2.5">
+                    <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-2.5">
                       <span className="font-mono text-[10px] text-zinc-500">
                         {entry.size_kb} KB • {entry.author}
                       </span>
@@ -380,7 +380,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                               setViewMode('local');
                             }
                           }}
-                          className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-purple-400 bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white"
+                          className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white bg-white text-black px-2.5 py-1 text-[11px] font-semibold text-black"
                         >
                           <Check className="h-3 w-3" />
                           {t.packs.hubInstalledSelect}
@@ -390,7 +390,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                           type="button"
                           disabled={busy}
                           onClick={() => handleInstall(entry.id, entry.download_url)}
-                          className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-purple-500/30 bg-purple-500/15 px-2.5 py-1 text-[11px] font-medium text-white transition hover:border-purple-400 hover:bg-purple-500 hover:text-white disabled:opacity-50"
+                          className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white transition hover:border-white hover:bg-white hover:text-black disabled:opacity-50"
                         >
                           <CloudDownload className="h-3.5 w-3.5" />
                           {busy ? t.packs.hubInstalling : t.packs.hubInstall}

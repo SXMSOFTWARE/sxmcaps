@@ -100,22 +100,19 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
   const canWrite = Boolean(device?.capabilities.macros && device.capabilities.writable);
 
   const filtered = macros.filter((m) =>
-    !search.trim()
-      ? true
-      : m.name.toLowerCase().includes(search.trim().toLowerCase())
+    !search.trim() ? true : m.name.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 lg:flex-row">
-      {/* Left Macros & Commands Drawer (Reference Bottom-Left Window Style) */}
-      <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-purple-500/20 bg-[#100d1a] lg:w-[300px]">
-        <div className="grid grid-cols-2 border-b border-purple-500/15 px-3 pt-3">
+      <aside className="sxm-card flex w-full shrink-0 flex-col overflow-hidden lg:w-[300px]">
+        <div className="grid grid-cols-2 border-b border-white/8 px-3 pt-3">
           <button
             type="button"
             onClick={() => setDrawerTab('macros')}
             className={`cursor-pointer border-b-2 pb-2.5 text-[11px] font-bold tracking-[0.12em] uppercase transition ${
               drawerTab === 'macros'
-                ? 'border-purple-400 text-white'
+                ? 'border-white text-white'
                 : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
@@ -126,7 +123,7 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
             onClick={() => setDrawerTab('commands')}
             className={`cursor-pointer border-b-2 pb-2.5 text-[11px] font-bold tracking-[0.12em] uppercase transition ${
               drawerTab === 'commands'
-                ? 'border-purple-400 text-white'
+                ? 'border-white text-white'
                 : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
@@ -135,7 +132,7 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-2 p-3">
-          <div className="flex flex-1 items-center gap-2 rounded-lg border border-purple-500/20 bg-[#0b0913] px-3 py-1.5">
+          <div className="flex flex-1 items-center gap-2 rounded-xl border border-white/10 bg-[#0b0b0d] px-3 py-1.5">
             <Search className="h-3.5 w-3.5 text-zinc-500" />
             <input
               type="text"
@@ -149,7 +146,7 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
             type="button"
             onClick={handleAddMacro}
             title={t.sxb.addMacro}
-            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg bg-purple-600 text-white hover:bg-purple-500"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white text-black hover:bg-zinc-200"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -157,43 +154,48 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
 
         <div className="flex-1 space-y-1.5 overflow-y-auto px-3 pb-3">
           {drawerTab === 'macros' ? (
-            filtered.map((m, idx) => (
-              <div
-                key={m.id}
-                onClick={() => setSelectedId(m.id)}
-                className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2.5 transition ${
-                  m.id === activeMacro?.id
-                    ? 'border-purple-400 bg-purple-600/20 shadow-[0_0_16px_rgba(147,51,234,0.2)]'
-                    : 'border-white/[0.06] bg-[#151221] hover:border-purple-500/35'
-                }`}
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-bold text-white">
-                    {m.name}
-                  </div>
-                  <div className="font-mono text-[10px] text-purple-300">
-                    Macro #{idx + 1} · {m.steps.length} steps
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteMacro(m.id);
-                  }}
-                  className="rounded p-1 text-zinc-500 hover:bg-white/10 hover:text-rose-400"
+            filtered.map((m, idx) => {
+              const sel = m.id === activeMacro?.id;
+              return (
+                <div
+                  key={m.id}
+                  onClick={() => setSelectedId(m.id)}
+                  className={`flex cursor-pointer items-center justify-between rounded-xl border px-3 py-2.5 transition ${
+                    sel
+                      ? 'border-white bg-white text-black'
+                      : 'border-white/[0.06] bg-[#0b0b0d] text-white hover:border-white/25'
+                  }`}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-bold">{m.name}</div>
+                    <div
+                      className={`font-mono text-[10px] ${
+                        sel ? 'text-zinc-700' : 'text-zinc-500'
+                      }`}
+                    >
+                      Macro #{idx + 1} · {m.steps.length} steps
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteMacro(m.id);
+                    }}
+                    className="rounded-full p-1 opacity-60 hover:bg-black/15 hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })
           ) : (
             <div className="space-y-1.5 text-xs text-zinc-300">
               {['Volume Mute', 'Play / Pause', 'Next Track', 'Calculator', 'Browser Home'].map(
                 (cmd) => (
                   <div
                     key={cmd}
-                    className="rounded-lg border border-white/[0.06] bg-[#151221] px-3 py-2.5 font-semibold"
+                    className="rounded-xl border border-white/[0.06] bg-[#0b0b0d] px-3 py-2.5 font-semibold"
                   >
                     {cmd}
                   </div>
@@ -204,13 +206,12 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
         </div>
       </aside>
 
-      {/* Right Macro Timeline & Hardware Flash Stage */}
-      <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-2xl border border-purple-500/20 bg-[#100d1a] p-5">
+      <div className="sxm-card flex min-w-0 flex-1 flex-col gap-3 p-5">
         {activeMacro ? (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-500/15 pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-3">
               <div className="flex items-center gap-2.5">
-                <Zap className="h-4 w-4 text-purple-400" />
+                <Zap className="h-4 w-4 text-white" />
                 <input
                   type="text"
                   value={activeMacro.name}
@@ -221,7 +222,7 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
                       )
                     )
                   }
-                  className="rounded-lg border border-purple-500/25 bg-[#0b0913] px-3 py-1.5 text-sm font-bold text-white outline-none focus:border-purple-400"
+                  className="rounded-xl border border-white/15 bg-[#0b0b0d] px-3 py-1.5 text-sm font-bold text-white outline-none focus:border-white/40"
                 />
               </div>
 
@@ -229,10 +230,10 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setRecording((r) => !r)}
-                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
+                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
                     recording
                       ? 'animate-pulse border-rose-400 bg-rose-500/20 text-rose-200'
-                      : 'border-purple-500/35 bg-[#171326] text-purple-200 hover:border-purple-400'
+                      : 'border-white/15 bg-[#0b0b0d] text-white hover:border-white/35'
                   }`}
                 >
                   {recording ? (
@@ -259,7 +260,7 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
                       setBusy(false);
                     }
                   }}
-                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-[0_0_20px_rgba(147,51,234,0.35)] hover:brightness-110 disabled:opacity-45"
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black hover:bg-zinc-200 disabled:opacity-45"
                 >
                   <Cpu className="h-3.5 w-3.5" />
                   {t.sxb.flashMacros}
@@ -269,30 +270,29 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
 
             <p className="text-xs text-zinc-400">{t.sxb.macroHint}</p>
 
-            {/* Macro Timeline Events */}
             <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
               {activeMacro.steps.map((step, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between rounded-xl border border-purple-500/15 bg-[#161224] px-3.5 py-2"
+                  className="flex items-center justify-between rounded-xl border border-white/8 bg-[#0b0b0d] px-3.5 py-2"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-[10px] text-zinc-500">
+                    <span className="font-mono text-[10px] text-zinc-500 tabular-nums">
                       #{i + 1}
                     </span>
                     <span
-                      className={`rounded px-2 py-0.5 font-mono text-[10px] font-bold uppercase ${
+                      className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase ${
                         step.is_down
-                          ? 'bg-purple-500/25 text-purple-200'
+                          ? 'bg-white text-black'
                           : 'bg-zinc-800 text-zinc-400'
                       }`}
                     >
                       {step.is_down ? 'DOWN' : 'UP'}
                     </span>
-                    <span className="rounded border border-white/15 bg-[#0c0a14] px-2 py-0.5 font-mono text-xs font-bold text-white">
+                    <span className="rounded border border-white/15 bg-[#141418] px-2 py-0.5 font-mono text-xs font-bold text-white">
                       {step.key_label}
                     </span>
-                    <span className="font-mono text-[11px] text-zinc-400">
+                    <span className="font-mono text-[11px] text-zinc-400 tabular-nums">
                       +{step.delay_ms} ms
                     </span>
                   </div>
@@ -311,7 +311,7 @@ export const SxBoardMacrosPanel: React.FC<SxBoardMacrosPanelProps> = ({
                         )
                       )
                     }
-                    className="cursor-pointer rounded p-1 text-zinc-500 hover:bg-white/10 hover:text-rose-400"
+                    className="cursor-pointer rounded-full p-1 text-zinc-500 hover:bg-white/10 hover:text-white"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

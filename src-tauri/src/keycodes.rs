@@ -149,8 +149,7 @@ pub fn evdev_to_web_code(code: u16) -> &'static str {
     }
 }
 
-/// Convert Web KeyboardEvent.code to Linux evdev keycode (used in tests)
-#[cfg(test)]
+/// Convert Web KeyboardEvent.code to Linux evdev keycode
 pub fn web_code_to_evdev(web_code: &str) -> Option<u16> {
     Some(match web_code {
         "Escape" => 1,
@@ -259,6 +258,11 @@ pub fn web_code_to_evdev(web_code: &str) -> Option<u16> {
         "ContextMenu" => 127,
         _ => return None,
     })
+}
+
+/// Public alias used by SxPerformance uinput transformer
+pub fn web_code_to_evdev_code(web_code: &str) -> Option<u16> {
+    web_code_to_evdev(web_code)
 }
 
 /// Map Mechvibes V1 (libuiohook) numeric keycode string -> Web KeyboardEvent.code

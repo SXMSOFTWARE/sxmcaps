@@ -256,6 +256,11 @@ mod platform {
             .map(|s| s.trim().to_string())
             .unwrap_or_else(|_| event_name.to_string());
 
+        // Prevent feedback loops with our own SxPerformance virtual uinput device
+        if name.starts_with("SxmCaps Virtual") {
+            return (false, name);
+        }
+
         let ev_val = u64::from_str_radix(ev_caps.trim(), 16).unwrap_or(0);
         if (ev_val & (1 << 1)) == 0 {
             return (false, name);

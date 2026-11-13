@@ -12,7 +12,7 @@ import {
   Keyboard,
   RotateCcw,
   Search,
-  Sparkles,
+  ShieldAlert,
   X,
 } from 'lucide-react';
 
@@ -56,10 +56,7 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
 
   const entries = activeLayer === 0 ? keymapLayer0 : keymapLayer1;
 
-  const reassigned = useMemo(
-    () => entries.filter((e) => e.is_modified),
-    [entries]
-  );
+  const reassigned = useMemo(() => entries.filter((e) => e.is_modified), [entries]);
 
   const filteredEntries = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -82,19 +79,27 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
     const q = targetFilter.trim().toLowerCase();
     if (!q) return targets;
     return targets.filter(
-      (tg) =>
-        tg.label.toLowerCase().includes(q) || tg.category.toLowerCase().includes(q)
+      (tg) => tg.label.toLowerCase().includes(q) || tg.category.toLowerCase().includes(q)
     );
   }, [targets, targetFilter]);
 
   const canWrite = Boolean(device?.capabilities.key_remapping && device.capabilities.writable);
+
+  if (device && device.device_kind !== 'keyboard') {
+    return (
+      <div className="sxm-card flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <ShieldAlert className="h-8 w-8 text-amber-300" />
+        <h3 className="text-sm font-bold text-white">{device.display_name}</h3>
+        <p className="max-w-md text-xs text-zinc-400">{t.sxb.readOnlyNotice}</p>
+      </div>
+    );
+  }
 
   const handleSelectVisualKey = (key: F75VisualKey) => {
     setSelectedIdx(key.matrixIndex);
   };
 
   const handleResetKey = async (matrixIndex: number) => {
-    // Esc=0x29 etc. Restoring single key cleanly via matching target label or restore layer fallback
     const entry = keymapLayer0.find((e) => e.matrix_index === matrixIndex);
     if (!entry) return;
     const match = targets.find(
@@ -107,16 +112,15 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 lg:flex-row">
-      {/* Left Control Drawer (Matches Reference Center Screenshot) */}
-      <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-purple-500/20 bg-[#100d1a] lg:w-[300px]">
-        {/* Layer Tabs Header */}
-        <div className="grid grid-cols-2 border-b border-purple-500/15 px-3 pt-3">
+      {/* Left Control Drawer */}
+      <aside className="sxm-card flex w-full shrink-0 flex-col overflow-hidden lg:w-[300px]">
+        <div className="grid grid-cols-2 border-b border-white/8 px-3 pt-3">
           <button
             type="button"
             onClick={() => onChangeLayer(0)}
             className={`cursor-pointer border-b-2 pb-2.5 text-[11px] font-bold tracking-[0.12em] uppercase transition ${
               activeLayer === 0
-                ? 'border-purple-400 text-white'
+                ? 'border-white text-white'
                 : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
@@ -127,7 +131,7 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
             onClick={() => onChangeLayer(1)}
             className={`cursor-pointer border-b-2 pb-2.5 text-[11px] font-bold tracking-[0.12em] uppercase transition ${
               activeLayer === 1
-                ? 'border-purple-400 text-white'
+                ? 'border-white text-white'
                 : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
@@ -135,9 +139,8 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
           </button>
         </div>
 
-        {/* Search Input */}
         <div className="p-3">
-          <div className="flex items-center gap-2 rounded-lg border border-purple-500/20 bg-[#0b0913] px-3 py-2">
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#0b0b0d] px-3 py-2">
             <Search className="h-3.5 w-3.5 text-zinc-500" />
             <input
               type="text"
@@ -149,9 +152,7 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
           </div>
         </div>
 
-        {/* Scrollable Reassigned + Others Key List */}
         <div className="flex-1 space-y-3 overflow-y-auto px-3 pb-3">
-          {/* REASSIGNED SECTION */}
           <div>
             <button
               type="button"
@@ -174,21 +175,25 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
                   <div
                     key={entry.matrix_index}
                     onClick={() => setSelectedIdx(entry.matrix_index)}
-                    className={`flex cursor-pointer items-center justify-between rounded-lg border px-2.5 py-2 transition ${
+                    className={`flex cursor-pointer items-center justify-between rounded-xl border px-2.5 py-2 transition ${
                       selectedIdx === entry.matrix_index
-                        ? 'border-purple-400 bg-purple-500/15'
-                        : 'border-purple-500/35 bg-[#161224] hover:border-purple-400'
+                        ? 'border-white bg-white text-black'
+                        : 'border-white/15 bg-[#0b0b0d] text-white hover:border-white/35'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="flex h-6 min-w-[26px] items-center justify-center rounded border border-purple-400/35 bg-[#1f1933] px-1.5 font-mono text-[10px] font-bold text-white">
+                      <span
+                        className={`flex h-6 min-w-[26px] items-center justify-center rounded border px-1.5 font-mono text-[10px] font-bold ${
+                          selectedIdx === entry.matrix_index
+                            ? 'border-black/25 bg-black text-white'
+                            : 'border-white/20 bg-[#141418] text-white'
+                        }`}
+                      >
                         {entry.key_label}
                       </span>
                       <div className="leading-tight">
-                        <div className="text-xs font-bold text-white">
-                          {entry.assigned_label}
-                        </div>
-                        <div className="text-[9px] tracking-wider text-purple-300 uppercase">
+                        <div className="text-xs font-bold">{entry.assigned_label}</div>
+                        <div className="text-[9px] tracking-wider opacity-60 uppercase">
                           #{entry.matrix_index}
                         </div>
                       </div>
@@ -200,7 +205,7 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
                           e.stopPropagation();
                           handleResetKey(entry.matrix_index);
                         }}
-                        className="rounded p-1 text-zinc-400 hover:bg-white/10 hover:text-white"
+                        className="rounded-full p-1 hover:bg-black/15"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -211,14 +216,13 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
             )}
           </div>
 
-          {/* OTHERS / ALL KEYS LIST */}
           <div>
             <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold tracking-[0.12em] text-zinc-500 uppercase">
               <span>{t.sxb.others}</span>
               <button
                 type="button"
                 onClick={() => onRefreshKeymap(activeLayer)}
-                className="cursor-pointer text-[10px] text-purple-300 hover:text-white"
+                className="cursor-pointer text-[10px] text-zinc-300 hover:text-white"
               >
                 {t.sxb.syncRead}
               </button>
@@ -231,21 +235,25 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
                     key={entry.matrix_index}
                     type="button"
                     onClick={() => setSelectedIdx(entry.matrix_index)}
-                    className={`flex w-full cursor-pointer items-center justify-between rounded-lg border px-2.5 py-2 text-left transition ${
+                    className={`flex w-full cursor-pointer items-center justify-between rounded-xl border px-2.5 py-2 text-left transition ${
                       selected
-                        ? 'border-purple-400 bg-purple-600/20 shadow-[0_0_16px_rgba(147,51,234,0.2)]'
-                        : 'border-white/[0.06] bg-[#151221] hover:border-purple-500/35 hover:bg-[#191529]'
+                        ? 'border-white bg-white text-black'
+                        : 'border-white/[0.06] bg-[#0b0b0d] text-zinc-100 hover:border-white/25'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="flex h-6 min-w-[26px] items-center justify-center rounded border border-white/15 bg-[#0d0b15] px-1.5 font-mono text-[10px] font-bold text-zinc-200">
+                      <span
+                        className={`flex h-6 min-w-[26px] items-center justify-center rounded border px-1.5 font-mono text-[10px] font-bold ${
+                          selected
+                            ? 'border-black/20 bg-black text-white'
+                            : 'border-white/15 bg-[#141418] text-zinc-200'
+                        }`}
+                      >
                         {entry.key_label}
                       </span>
-                      <span className="text-xs font-semibold text-zinc-100">
-                        {entry.assigned_label}
-                      </span>
+                      <span className="text-xs font-semibold">{entry.assigned_label}</span>
                     </div>
-                    <span className="font-mono text-[10px] text-zinc-500">
+                    <span className="font-mono text-[10px] opacity-60">
                       #{entry.matrix_index}
                     </span>
                   </button>
@@ -269,21 +277,20 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
           badgeText={activeLayer === 0 ? t.sxb.keysTabBase : t.sxb.keysTabFn}
         />
 
-        {/* Contextual Remap Action Inspector */}
-        <div className="rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4">
+        <div className="sxm-card p-4">
           {!canWrite ? (
             <div className="flex items-center gap-2.5 text-xs text-zinc-300">
-              <Sparkles className="h-4 w-4 text-purple-400" />
+              <ShieldAlert className="h-4 w-4 text-amber-300" />
               <span>{t.sxb.readOnlyNotice}</span>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-3">
-                  <Keyboard className="h-4 w-4 text-purple-400" />
+                  <Keyboard className="h-4 w-4 text-white" />
                   <span className="text-xs font-bold text-white uppercase">
                     {t.sxb.selectedKey}:{' '}
-                    <span className="rounded bg-purple-600/30 px-2 py-0.5 font-mono text-purple-200">
+                    <span className="rounded bg-white px-2 py-0.5 font-mono text-black">
                       {selectedEntry?.key_label ?? 'Esc'}
                     </span>
                   </span>
@@ -300,7 +307,7 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
                     type="button"
                     disabled={loading}
                     onClick={onRestoreLayer0}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-purple-500/25 bg-[#171326] px-3 py-1.5 text-[11px] font-semibold text-zinc-200 hover:border-purple-400 hover:text-white disabled:opacity-50"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/15 bg-[#0b0b0d] px-3 py-1.5 text-[11px] font-semibold text-zinc-200 hover:border-white/40 hover:text-white disabled:opacity-50"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     {t.sxb.restoreBaseLayer}
@@ -314,12 +321,11 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
                   value={targetFilter}
                   onChange={(e) => setTargetFilter(e.target.value)}
                   placeholder={t.sxb.remapTarget}
-                  className="min-w-[200px] flex-1 rounded-lg border border-purple-500/20 bg-[#0b0913] px-3 py-1.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-purple-400"
+                  className="min-w-[200px] flex-1 rounded-xl border border-white/10 bg-[#0b0b0d] px-3 py-1.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-white/35"
                 />
 
-                {/* Macro bind quick selector */}
-                <div className="flex items-center gap-1.5 rounded-lg border border-purple-500/20 bg-[#151123] px-2.5 py-1">
-                  <span className="text-[10px] font-bold text-purple-300 uppercase">
+                <div className="flex items-center gap-1.5 rounded-full border border-white/15 bg-[#0b0b0d] px-3 py-1">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase">
                     Macro
                   </span>
                   <select
@@ -328,7 +334,7 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
                     className="bg-transparent text-xs text-white outline-none"
                   >
                     {[0, 1, 2, 3, 4, 5].map((m) => (
-                      <option key={m} value={m} className="bg-[#120f1d]">
+                      <option key={m} value={m} className="bg-[#111114]">
                         #{m + 1}
                       </option>
                     ))}
@@ -339,7 +345,7 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
                     onClick={() =>
                       onWriteEntry(activeLayer, selectedIdx, [3, 1, 1, macroPickIdx])
                     }
-                    className="cursor-pointer rounded bg-purple-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-purple-500"
+                    className="cursor-pointer rounded-full bg-white px-2.5 py-0.5 text-[10px] font-bold text-black hover:bg-zinc-200"
                   >
                     Bind
                   </button>
@@ -353,7 +359,7 @@ export const SxBoardKeysPanel: React.FC<SxBoardKeysPanelProps> = ({
                     type="button"
                     disabled={loading}
                     onClick={() => onWriteEntry(activeLayer, selectedIdx, tg.code)}
-                    className="cursor-pointer rounded-md border border-white/10 bg-[#171326] px-2.5 py-1 text-[11px] font-semibold text-zinc-200 transition hover:border-purple-400 hover:bg-purple-600 hover:text-white disabled:opacity-50"
+                    className="cursor-pointer rounded-full border border-white/10 bg-[#0b0b0d] px-3 py-1 text-[11px] font-semibold text-zinc-200 transition hover:border-white hover:bg-white hover:text-black disabled:opacity-50"
                   >
                     {tg.label}
                   </button>

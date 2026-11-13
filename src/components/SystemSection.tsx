@@ -111,10 +111,10 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
   return (
     <div className="grid h-full grid-cols-1 gap-3.5 overflow-y-auto lg:grid-cols-12">
       {/* Left: App Profiles (Per-Application Rules) */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4 lg:col-span-6">
-        <div className="flex items-center justify-between border-b border-purple-500/15 pb-2.5">
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#111114] p-4 lg:col-span-6">
+        <div className="flex items-center justify-between border-b border-white/8 pb-2.5">
           <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
-            <AppWindow className="h-3.5 w-3.5 text-purple-400" />
+            <AppWindow className="h-3.5 w-3.5 text-white" />
             {t.system.profilesTitle}
           </div>
 
@@ -128,8 +128,8 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
             }
             className={`relative h-5 w-10 cursor-pointer rounded-full border transition ${
               settings.profiles_enabled
-                ? 'border-purple-500 bg-purple-600 shadow-[0_0_10px_rgba(147,51,234,0.45)]'
-                : 'border-purple-500/25 bg-[#1b152d]'
+                ? 'border-white bg-white text-black shadow-none'
+                : 'border-white/12 bg-[#1c1c21]'
             }`}
           >
             <span
@@ -142,7 +142,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-purple-500/15 bg-[#0a0812] px-3 py-2 text-[11px]">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-[#0b0b0d] px-3 py-2 text-[11px]">
           <span className="truncate text-zinc-400">
             {t.system.activeWindow}:{' '}
             <strong className="font-mono text-white">
@@ -158,7 +158,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                 setRulePattern(activeWindow.app_class);
                 setRuleName(activeWindow.app_class);
               }}
-              className="shrink-0 cursor-pointer rounded border border-purple-500/25 bg-purple-500/15 px-2 py-0.5 text-[10px] text-white hover:bg-purple-600 hover:text-white"
+              className="shrink-0 cursor-pointer rounded border border-white/12 bg-white/10 px-2 py-0.5 text-[10px] text-white hover:bg-white hover:text-black"
             >
               {t.system.useWindow}
             </button>
@@ -166,14 +166,14 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
         </div>
 
         {/* Add Profile Rule Form */}
-        <div className="space-y-2 rounded-xl border border-purple-500/15 bg-[#0a0812] p-3">
+        <div className="space-y-2 rounded-xl border border-white/8 bg-[#0b0b0d] p-3">
           <div className="grid grid-cols-2 gap-2">
             <input
               type="text"
               value={rulePattern}
               onChange={(e) => setRulePattern(e.target.value)}
               placeholder={t.system.patternPlaceholder}
-              className="rounded-lg border border-purple-500/25 bg-[#161224] px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-purple-400"
+              className="rounded-lg border border-white/12 bg-[#16161a] px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-white"
             />
             <select
               value={ruleMute ? '__MUTE__' : rulePackId}
@@ -185,7 +185,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                   setRulePackId(e.target.value);
                 }
               }}
-              className="cursor-pointer rounded-lg border border-purple-500/25 bg-[#161224] px-2.5 py-1.5 text-xs text-white outline-none focus:border-purple-400"
+              className="cursor-pointer rounded-lg border border-white/12 bg-[#16161a] px-2.5 py-1.5 text-xs text-white outline-none focus:border-white"
             >
               <option value="__MUTE__">{t.system.autoMute}</option>
               {keyboardPacks.map((p) => (
@@ -199,7 +199,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
             type="button"
             disabled={!rulePattern.trim()}
             onClick={handleAddRule}
-            className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-purple-500 disabled:opacity-40"
+            className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-white text-black px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-zinc-200 disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
             {t.system.addRule}
@@ -216,7 +216,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
             settings.app_profiles.map((rule) => (
               <div
                 key={rule.id}
-                className="flex items-center justify-between gap-2 rounded-lg border border-purple-500/20 bg-[#151123] px-3 py-2 text-xs"
+                className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#16161a] px-3 py-2 text-xs"
               >
                 <div className="min-w-0">
                   <div className="truncate font-mono font-semibold text-white">
@@ -245,8 +245,8 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                     }
                     className={`cursor-pointer rounded border px-2 py-0.5 text-[10px] font-medium ${
                       rule.enabled
-                        ? 'border-purple-400 bg-purple-600 text-white shadow-[0_0_12px_rgba(147,51,234,0.35)]'
-                        : 'border-purple-500/25 text-zinc-400'
+                        ? 'border-white bg-white text-black font-bold shadow-none'
+                        : 'border-white/12 text-zinc-400'
                     }`}
                   >
                     {rule.enabled ? t.system.active : t.system.paused}
@@ -261,7 +261,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                         ),
                       })
                     }
-                    className="cursor-pointer rounded p-1 text-zinc-500 hover:bg-purple-500/20 hover:text-white"
+                    className="cursor-pointer rounded p-1 text-zinc-500 hover:bg-white/12 hover:text-white"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -275,23 +275,23 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
       {/* Right: Hardware Permissions, Language, Autostart, Import & Updater */}
       <div className="flex flex-col gap-3 lg:col-span-6">
         {/* Global Input, Language & Autostart */}
-        <div className="flex flex-col gap-2.5 rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4">
-          <div className="flex items-center justify-between border-b border-purple-500/15 pb-2">
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111114] p-4">
+          <div className="flex items-center justify-between border-b border-white/8 pb-2">
             <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
-              <Cpu className="h-3.5 w-3.5 text-purple-400" />
+              <Cpu className="h-3.5 w-3.5 text-white" />
               {t.system.hwTitle}
             </div>
             <button
               type="button"
               onClick={onRescanInput}
-              className="inline-flex cursor-pointer items-center gap-1 rounded border border-purple-500/25 bg-purple-500/10 px-2 py-0.5 text-[10px] text-zinc-200 hover:bg-purple-500/20"
+              className="inline-flex cursor-pointer items-center gap-1 rounded border border-white/12 bg-white/6 px-2 py-0.5 text-[10px] text-zinc-200 hover:bg-white/12"
             >
               <RefreshCw className="h-3 w-3" />
               {t.system.refresh}
             </button>
           </div>
 
-          <div className="rounded-xl border border-purple-500/15 bg-[#0a0812] p-3">
+          <div className="rounded-xl border border-white/8 bg-[#0b0b0d] p-3">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="text-xs font-semibold text-white">
@@ -305,8 +305,8 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               </div>
               <div className="flex items-center gap-1.5">
                 {isGlobalActive && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-purple-600/20 px-2.5 py-0.5 text-[10px] font-bold text-purple-300 border border-purple-500/30">
-                    <CheckCircle2 className="h-3 w-3 text-purple-400" />
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white text-black px-2.5 py-0.5 text-[10px] font-bold text-zinc-200 border border-white/15">
+                    <CheckCircle2 className="h-3 w-3 text-white" />
                     {t.system.connected}
                   </span>
                 )}
@@ -316,8 +316,8 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                   onClick={handleUdev}
                   className={`inline-flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition disabled:opacity-50 ${
                     isGlobalActive
-                      ? 'border border-purple-500/25 bg-purple-500/10 text-purple-200 hover:bg-purple-600 hover:text-white'
-                      : 'bg-purple-600 text-white hover:bg-purple-500'
+                      ? 'border border-white/12 bg-white/6 text-white hover:bg-white hover:text-black'
+                      : 'bg-white text-black font-bold hover:bg-zinc-200'
                   }`}
                 >
                   <ShieldCheck className="h-3.5 w-3.5" />
@@ -327,11 +327,11 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
             </div>
 
             {inputStatus.active_devices.length > 0 && (
-              <div className="mt-2 flex max-h-16 flex-wrap gap-1 overflow-y-auto border-t border-purple-500/10 pt-2">
+              <div className="mt-2 flex max-h-16 flex-wrap gap-1 overflow-y-auto border-t border-white/8 pt-2">
                 {inputStatus.active_devices.map((dev, i) => (
                   <span
                     key={`${dev}-${i}`}
-                    className="rounded border border-purple-500/20 bg-[#161224] px-1.5 py-0.5 font-mono text-[9px] text-zinc-300"
+                    className="rounded border border-white/10 bg-[#16161a] px-1.5 py-0.5 font-mono text-[9px] text-zinc-300"
                   >
                     {dev}
                   </span>
@@ -341,14 +341,14 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
           </div>
 
           {/* Language Selector (Auto / TR / EN) */}
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-purple-500/15 bg-[#0a0812] p-2.5">
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-[#0b0b0d] p-2.5">
             <div className="flex items-center gap-2">
               <Languages className="h-4 w-4 text-zinc-300" />
               <span className="text-[11px] font-medium text-white">
                 {t.system.language}
               </span>
             </div>
-            <div className="flex items-center gap-1 rounded-lg border border-purple-500/20 bg-[#151123] p-0.5">
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-[#16161a] p-0.5">
               {(
                 [
                   { id: 'auto', label: t.system.langAuto(detectedSys) },
@@ -366,8 +366,8 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                     }
                     className={`cursor-pointer rounded-md px-2 py-1 text-[10px] font-semibold transition ${
                       active
-                        ? 'bg-purple-600 text-white'
-                        : 'text-zinc-400 hover:text-white'
+                        ? 'bg-white text-black font-bold'
+                        : 'text-zinc-400 hover:text-black'
                     }`}
                   >
                     {opt.label}
@@ -378,7 +378,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div className="flex items-center justify-between rounded-xl border border-purple-500/15 bg-[#0a0812] p-2.5">
+            <div className="flex items-center justify-between rounded-xl border border-white/8 bg-[#0b0b0d] p-2.5">
               <div>
                 <div className="text-[11px] font-medium text-white">
                   {t.system.autostart}
@@ -397,8 +397,8 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                 }
                 className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full border transition ${
                   settings.autostart
-                    ? 'border-purple-500 bg-purple-600 shadow-[0_0_10px_rgba(147,51,234,0.45)]'
-                    : 'border-purple-500/25 bg-[#1b152d]'
+                    ? 'border-white bg-white text-black shadow-none'
+                    : 'border-white/12 bg-[#1c1c21]'
                 }`}
               >
                 <span
@@ -411,7 +411,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border border-purple-500/15 bg-[#0a0812] p-2.5">
+            <div className="flex items-center justify-between rounded-xl border border-white/8 bg-[#0b0b0d] p-2.5">
               <div>
                 <div className="text-[11px] font-medium text-white">
                   {t.system.tray}
@@ -430,8 +430,8 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                 }
                 className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full border transition ${
                   settings.minimize_to_tray
-                    ? 'border-purple-500 bg-purple-600 shadow-[0_0_10px_rgba(147,51,234,0.45)]'
-                    : 'border-purple-500/25 bg-[#1b152d]'
+                    ? 'border-white bg-white text-black shadow-none'
+                    : 'border-white/12 bg-[#1c1c21]'
                 }`}
               >
                 <span
@@ -447,10 +447,10 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
         </div>
 
         {/* Importer & Release Update Check */}
-        <div className="flex flex-1 flex-col justify-between gap-2.5 rounded-2xl border border-purple-500/20 bg-[#100d1a] p-4">
-          <div className="flex items-center justify-between border-b border-purple-500/15 pb-2">
+        <div className="flex flex-1 flex-col justify-between gap-2.5 rounded-2xl border border-white/10 bg-[#111114] p-4">
+          <div className="flex items-center justify-between border-b border-white/8 pb-2">
             <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
-              <HardDrive className="h-3.5 w-3.5 text-purple-400" />
+              <HardDrive className="h-3.5 w-3.5 text-white" />
               {t.system.importerTitle} ({appVersion})
             </div>
 
@@ -458,14 +458,14 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               type="button"
               disabled={checkingUpdate}
               onClick={handleCheckUpdate}
-              className="cursor-pointer rounded border border-purple-500/25 bg-purple-500/10 px-2 py-0.5 text-[10px] text-zinc-200 hover:bg-purple-500 hover:text-white disabled:opacity-50"
+              className="cursor-pointer rounded border border-white/12 bg-white/6 px-2 py-0.5 text-[10px] text-zinc-200 hover:bg-white hover:text-black disabled:opacity-50"
             >
               {checkingUpdate ? t.system.checking : t.system.checkUpdate}
             </button>
           </div>
 
           {updateInfo && (
-            <div className="rounded-lg border border-purple-500/25 bg-[#0a0812] px-3 py-2 text-[11px]">
+            <div className="rounded-lg border border-white/12 bg-[#0b0b0d] px-3 py-2 text-[11px]">
               {updateInfo.has_update ? (
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-white">
@@ -476,7 +476,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                     href={updateInfo.release_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded bg-purple-600 px-2 py-0.5 text-[10px] font-semibold text-white"
+                    className="rounded bg-white text-black px-2 py-0.5 text-[10px] font-semibold text-black"
                   >
                     {t.system.download}
                   </a>
@@ -496,7 +496,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
             <button
               type="button"
               onClick={onImportZip}
-              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-purple-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-purple-500"
+              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-white text-black px-2.5 py-2 text-xs font-semibold text-black transition hover:bg-zinc-200"
             >
               <Plus className="h-3.5 w-3.5" />
               {t.system.addZip}
@@ -504,7 +504,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
             <button
               type="button"
               onClick={onImportFolder}
-              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-purple-500/25 bg-[#161224] px-2.5 py-2 text-xs font-semibold text-white transition hover:border-purple-400 hover:bg-purple-500/20"
+              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/12 bg-[#16161a] px-2.5 py-2 text-xs font-semibold text-white transition hover:border-white hover:bg-white/12"
             >
               <FolderUp className="h-3.5 w-3.5" />
               {t.system.folder}
@@ -513,7 +513,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               type="button"
               onClick={onOpenFolder}
               title={soundpacksDir}
-              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-purple-500/25 bg-[#0a0812] px-2.5 py-2 text-xs text-zinc-200 transition hover:border-purple-400"
+              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/12 bg-[#0b0b0d] px-2.5 py-2 text-xs text-zinc-200 transition hover:border-white"
             >
               <FolderOpen className="h-3.5 w-3.5" />
               {t.system.openDir}

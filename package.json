@@ -1,9 +1,9 @@
 {
   "name": "sxmcaps",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
-  "description": "SxBoards (sxmcaps) - Universal Peripheral Driver & Keycap Sound Platform",
+  "description": "SxmCaps — Keycap Sound Studio, SxBoards Driver, SxLighting & SxPerformance",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -54,10 +54,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'sxmcaps ${{ github.ref_name }}'
+          releaseName: 'SxmCaps ${{ github.ref_name }}'
           releaseBody: |
-            ### sxmcaps ${{ github.ref_name }}
-            Monochrome Mechanical Keycap & Mouse Sound Studio (Linux, Windows, macOS).
+            ### SxmCaps ${{ github.ref_name }}
+            Monochrome Peripheral & Sound Studio — SxBoards HID, SxLighting Compositor, SxPerformance Engine & Acoustic DSP (Linux, Windows, macOS).
 
             - **Linux**: `.AppImage`, `.deb`, `.rpm`
             - **Windows**: `.exe` (NSIS installer) & `.msi`

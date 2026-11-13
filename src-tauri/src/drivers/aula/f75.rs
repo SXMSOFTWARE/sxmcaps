@@ -1,6 +1,7 @@
 use crate::drivers::{
     ConnectionLink, DeviceCapabilities, DeviceHardwareState, DeviceKind, EffectMetaDto,
-    HardwareDeviceInfo, KeyLayoutItemDto, KeymapEntryDto, PeripheralDriver, RemapTargetDto,
+    HardwareDeviceInfo, KeyLayoutItemDto, KeymapEntryDto, LedTopologyNode, LightingCapability,
+    PeripheralDriver, RemapTargetDto,
 };
 use hidapi::{HidApi, HidDevice};
 use std::ffi::CString;
@@ -301,6 +302,65 @@ pub fn build_f75_layout() -> Vec<KeyLayoutItemDto> {
         }
     }
     out
+}
+
+pub fn build_f75_topology() -> Vec<LedTopologyNode> {
+    let layout = build_f75_layout();
+    let max_x = layout
+        .iter()
+        .map(|k| k.x + k.width)
+        .fold(16.0_f32, f32::max);
+    let max_row = layout.iter().map(|k| k.row).max().unwrap_or(5).max(1) as f32;
+
+    layout
+        .into_iter()
+        .enumerate()
+        .map(|(index, k)| {
+            let cx = ((k.x + k.width * 0.5) / max_x).clamp(0.0, 1.0);
+            let cy = (k.row as f32 / max_row).clamp(0.0, 1.0);
+            let is_mod = matches!(
+                k.web_code.as_str(),
+                "Escape"
+                    | "Tab"
+                    | "CapsLock"
+                    | "ShiftLeft"
+                    | "ShiftRight"
+                    | "ControlLeft"
+                    | "ControlRight"
+                    | "MetaLeft"
+                    | "AltLeft"
+                    | "AltRight"
+                    | "Fn"
+                    | "Backspace"
+                    | "Enter"
+                    | "Delete"
+                    | "PageUp"
+                    | "PageDown"
+                    | "End"
+            );
+            let zone = if k.web_code == "Knob" {
+                "knob"
+            } else if k.row == 0 && k.web_code.starts_with('F') {
+                "fn"
+            } else if k.x >= 14.5 {
+                "nav"
+            } else if is_mod {
+                "mod"
+            } else {
+                "alpha"
+            };
+            LedTopologyNode {
+                index,
+                matrix_index: k.matrix_index,
+                label: k.label,
+                web_code: k.web_code,
+                x: cx,
+                y: cy,
+                zone: zone.to_string(),
+                is_modifier: is_mod,
+            }
+        })
+        .collect()
 }
 
 pub fn remap_targets() -> Vec<RemapTargetDto> {
@@ -709,7 +769,7 @@ impl AulaF75Driver {
                 usage_page: d.usage_page(),
                 online: true,
                 permission_ok,
-                capabilities: Self::f75_capabilities(true),
+                capabilities: Self::f75_capabilities(permission_ok, permission_ok),
                 notes: "Native wired 520B HID Feature Report driver (SinoWealth 258a:010c).".to_string(),
             });
         }
@@ -746,7 +806,7 @@ impl AulaF75Driver {
                 usage_page: d.usage_page(),
                 online,
                 permission_ok,
-                capabilities: Self::f75_capabilities(true),
+                capabilities: Self::f75_capabilities(permission_ok && online, permission_ok),
                 notes: if online {
                     "2.4G wireless HID driver connected & awake.".to_string()
                 } else {
@@ -779,7 +839,7 @@ impl AulaF75Driver {
                 usage_page: d.usage_page(),
                 online: true,
                 permission_ok,
-                capabilities: Self::f75_capabilities(false),
+                capabilities: Self::f75_capabilities(false, permission_ok),
                 notes: "Bluetooth mode is view-only: switch F75 to Wired USB-C or 2.4G to write RGB/Keymap.".to_string(),
             });
         }
@@ -787,10 +847,11 @@ impl AulaF75Driver {
         found
     }
 
-    fn f75_capabilities(writable: bool) -> DeviceCapabilities {
+    fn f75_capabilities(writable: bool, comm_ok: bool) -> DeviceCapabilities {
         DeviceCapabilities {
             rgb_effects: true,
             per_key_rgb: true,
+            host_streaming: writable,
             side_light: true,
             knob_mode: true,
             os_mode: true,
@@ -801,7 +862,10 @@ impl AulaF75Driver {
             macros: true,
             battery_status: false,
             sound_engine: true,
+            communication_supported: comm_ok,
             writable,
+            lighting_mode: LightingCapability::PerKeyHost,
+            led_count: 82,
         }
     }
 
@@ -1100,6 +1164,7 @@ impl AulaF75Driver {
                 })
                 .collect(),
             layout: build_f75_layout(),
+            topology: build_f75_topology(),
             raw_config_valid: led_block_valid(block),
         }
     }
@@ -1157,7 +1222,7 @@ impl PeripheralDriver for AulaF75Driver {
                 os_mode: 0,
                 win_lock: false,
                 sleep_seconds: 300,
-                per_key_colors: vec![[139, 92, 246]; LED_COUNT],
+                per_key_colors: vec![[220, 220, 225]; LED_COUNT],
                 supported_effects: EFFECTS
                     .iter()
                     .map(|&(id, name_en, name_tr, has_speed, has_brightness, has_color)| EffectMetaDto {
@@ -1170,6 +1235,7 @@ impl PeripheralDriver for AulaF75Driver {
                     })
                     .collect(),
                 layout: build_f75_layout(),
+                topology: build_f75_topology(),
                 raw_config_valid: false,
             });
         }
@@ -1180,6 +1246,25 @@ impl PeripheralDriver for AulaF75Driver {
             .map(|raw| decode_planar_per_key(&raw))
             .unwrap_or_else(|_| vec![[0, 0, 0]; LED_COUNT]);
         Ok(self.build_state_from_block(&block, per_key))
+    }
+
+    fn poll_live_state(&self) -> Result<Option<DeviceHardwareState>, String> {
+        if self.link == ConnectionLink::Bluetooth || !self.info.capabilities.writable {
+            return Ok(None);
+        }
+        let Ok(guard) = self.io_lock.try_lock() else {
+            return Ok(None);
+        };
+        drop(guard);
+        let Ok(_guard) = self.io_lock.lock() else {
+            return Ok(None);
+        };
+        let block = self.read_validated_led_block()?;
+        Ok(Some(self.build_state_from_block(&block, Vec::new())))
+    }
+
+    fn get_led_topology(&self) -> Vec<LedTopologyNode> {
+        build_f75_topology()
     }
 
     fn apply_rgb_effect(

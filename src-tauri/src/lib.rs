@@ -10,6 +10,8 @@ mod soundpack;
 mod stats;
 mod studio;
 mod sxboards_presets;
+mod sxlighting;
+mod sxperformance;
 
 use audio::{AudioEngine, DspParams};
 use autostart::{is_autostart_enabled, set_autostart};
@@ -34,7 +36,7 @@ use soundpack::{
 use stats::{StatsData, StatsManager};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Duration;
 use studio::{
     export_pack_zip, inspect_audio_file, preview_audio_slice, save_studio_pack,
@@ -44,6 +46,12 @@ use sxboards_presets::{
     load_workspace_store, save_workspace_store, SxBoardMacro, SxBoardPreset,
     SxBoardWorkspaceStore,
 };
+use sxlighting::{
+    list_saved_presets as list_sxlighting_presets, presets_dir as sxlighting_presets_dir,
+    save_preset_to_disk as save_sxlighting_preset_file, validate_preset as validate_sxlighting_preset,
+    SxLightingEngine, SxLightingPreset, SxLightingStatus,
+};
+use sxperformance::{SxPerformanceConfig, SxPerformanceDiagnostics, SxPerformanceEngine};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
@@ -69,6 +77,10 @@ pub struct InitialStateDto {
     pub devices: Vec<HardwareDeviceInfo>,
     pub remap_targets: Vec<RemapTargetDto>,
     pub workspace: SxBoardWorkspaceStore,
+    pub sxlighting_status: SxLightingStatus,
+    pub sxlighting_presets: Vec<SxLightingPreset>,
+    pub sxperformance_config: SxPerformanceConfig,
+    pub sxperformance_diagnostics: SxPerformanceDiagnostics,
 }
 
 pub struct EngineState {
@@ -82,6 +94,10 @@ pub struct EngineState {
     pub profile_override: Mutex<Option<ProfileOverrideState>>,
     pub driver_cache: RwLock<HashMap<String, Arc<dyn PeripheralDriver>>>,
     pub workspace_store: Mutex<SxBoardWorkspaceStore>,
+    pub sxlighting: Arc<SxLightingEngine>,
+    pub sxperformance: Arc<SxPerformanceEngine>,
+    pub watched_device_id: RwLock<String>,
+    pub app_handle_cell: Arc<OnceLock<AppHandle>>,
 }
 
 #[derive(Debug, Clone)]
@@ -118,6 +134,9 @@ impl EngineState {
                 0.0
             };
             self.audio.play_clip(&clip, vol, cfg.pitch_variation, pan);
+            let band_idx = ((pan + 0.5).clamp(0.0, 0.99) * 8.0) as usize;
+            let intensity = if is_down { vol.clamp(0.25, 1.0) } else { (vol * 0.45).clamp(0.1, 0.7) };
+            self.sxlighting.notify_audio_trigger(intensity, band_idx);
         }
     }
 
@@ -317,6 +336,10 @@ fn get_initial_state(state: State<'_, Arc<EngineState>>) -> InitialStateDto {
         devices,
         remap_targets,
         workspace,
+        sxlighting_status: state.sxlighting.status(),
+        sxlighting_presets: list_sxlighting_presets(),
+        sxperformance_config: state.sxperformance.get_config(),
+        sxperformance_diagnostics: state.sxperformance.get_diagnostics(),
     }
 }
 
@@ -759,6 +782,9 @@ async fn get_device_hardware_state(
     device_id: String,
     state: State<'_, Arc<EngineState>>,
 ) -> Result<DeviceHardwareState, String> {
+    if let Ok(mut w) = state.watched_device_id.write() {
+        *w = device_id.clone();
+    }
     let drv = state.get_or_open_driver(&device_id)?;
     tauri::async_runtime::spawn_blocking(move || drv.read_state())
         .await
@@ -774,6 +800,7 @@ async fn apply_device_rgb_effect(
     color_idx: u8,
     state: State<'_, Arc<EngineState>>,
 ) -> Result<DeviceHardwareState, String> {
+    let _ = state.sxlighting.stop();
     let drv = state.get_or_open_driver(&device_id)?;
     tauri::async_runtime::spawn_blocking(move || {
         drv.apply_rgb_effect(effect_id, brightness, speed, color_idx)
@@ -789,6 +816,7 @@ async fn apply_device_per_key_rgb(
     brightness: u8,
     state: State<'_, Arc<EngineState>>,
 ) -> Result<DeviceHardwareState, String> {
+    let _ = state.sxlighting.stop();
     let drv = state.get_or_open_driver(&device_id)?;
     tauri::async_runtime::spawn_blocking(move || drv.apply_per_key_rgb(colors, brightness))
         .await
@@ -1116,6 +1144,155 @@ async fn flash_macros_to_device(
         .map_err(|e| format!("Macro flash error: {e}"))?
 }
 
+// ============================================================================
+// SxLighting & SxPerformance & Live Hardware Sync Commands
+// ============================================================================
+#[tauri::command]
+fn set_watched_hardware_device(device_id: String, state: State<'_, Arc<EngineState>>) {
+    if let Ok(mut w) = state.watched_device_id.write() {
+        *w = device_id;
+    }
+}
+
+#[tauri::command]
+fn get_sxlighting_state(state: State<'_, Arc<EngineState>>) -> (SxLightingStatus, Vec<SxLightingPreset>) {
+    (state.sxlighting.status(), list_sxlighting_presets())
+}
+
+#[tauri::command]
+fn apply_sxlighting_config(
+    preset: SxLightingPreset,
+    active: bool,
+    stream_to_hardware: bool,
+    device_id: String,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<SxLightingStatus, String> {
+    let driver = if active && !device_id.trim().is_empty() {
+        state.get_or_open_driver(&device_id).ok()
+    } else {
+        None
+    };
+    state
+        .sxlighting
+        .apply_config(preset, active, stream_to_hardware, driver)
+}
+
+#[tauri::command]
+fn stop_sxlighting(state: State<'_, Arc<EngineState>>) -> SxLightingStatus {
+    state.sxlighting.stop()
+}
+
+#[tauri::command]
+fn save_sxlighting_preset(
+    preset: SxLightingPreset,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<(SxLightingStatus, Vec<SxLightingPreset>), String> {
+    let valid = validate_sxlighting_preset(preset)?;
+    save_sxlighting_preset_file(&valid)?;
+    Ok((state.sxlighting.status(), list_sxlighting_presets()))
+}
+
+#[tauri::command]
+fn delete_sxlighting_preset(preset_id: String) -> Result<Vec<SxLightingPreset>, String> {
+    let safe_id: String = preset_id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let path = sxlighting_presets_dir().join(format!("{safe_id}.sxl"));
+    if path.exists() {
+        std::fs::remove_file(&path)
+            .map_err(|e| format!("Preset dosyası silinemedi: {e}"))?;
+    }
+    Ok(list_sxlighting_presets())
+}
+
+#[tauri::command]
+async fn export_sxlighting_preset_file(
+    preset: SxLightingPreset,
+    app: AppHandle,
+) -> Result<Option<String>, String> {
+    let valid = validate_sxlighting_preset(preset)?;
+    let safe_name: String = valid
+        .id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let default_name = format!("{}.sxl", safe_name.trim_matches('_'));
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_file_name(&default_name)
+            .add_filter("SxLighting Preset (.sxl)", &["sxl", "json"])
+            .blocking_save_file()
+    })
+    .await
+    .map_err(|e| format!("Dosya penceresi hatası: {e}"))?;
+
+    let Some(dest) = picked else {
+        return Ok(None);
+    };
+    let dest_path = dest
+        .into_path()
+        .map_err(|e| format!("Hedef yol çözülemedi: {e}"))?;
+    let json = serde_json::to_string_pretty(&valid).map_err(|e| e.to_string())?;
+    std::fs::write(&dest_path, json).map_err(|e| format!("Yazma hatası: {e}"))?;
+    Ok(Some(dest_path.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+async fn import_sxlighting_preset_file(
+    app: AppHandle,
+) -> Result<Option<(SxLightingPreset, Vec<SxLightingPreset>)>, String> {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .add_filter("SxLighting Preset (.sxl)", &["sxl", "json"])
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(|e| format!("Dosya seçme hatası: {e}"))?;
+
+    let Some(file) = picked else {
+        return Ok(None);
+    };
+    let path = file
+        .into_path()
+        .map_err(|e| format!("Dosya yolu çözülemedi: {e}"))?;
+    let raw = std::fs::read_to_string(&path).map_err(|e| format!("Okuma hatası: {e}"))?;
+    let parsed: SxLightingPreset =
+        serde_json::from_str(&raw).map_err(|e| format!("Geçersiz .sxl biçimi: {e}"))?;
+    let valid = validate_sxlighting_preset(parsed)?;
+    let saved = save_sxlighting_preset_file(&valid)?;
+    Ok(Some((saved, list_sxlighting_presets())))
+}
+
+#[tauri::command]
+fn get_sxperformance_state(
+    state: State<'_, Arc<EngineState>>,
+) -> (SxPerformanceConfig, SxPerformanceDiagnostics) {
+    (
+        state.sxperformance.get_config(),
+        state.sxperformance.get_diagnostics(),
+    )
+}
+
+#[tauri::command]
+fn update_sxperformance_config(
+    config: SxPerformanceConfig,
+    state: State<'_, Arc<EngineState>>,
+) -> Result<(SxPerformanceConfig, SxPerformanceDiagnostics), String> {
+    let saved = state.sxperformance.update_config(config)?;
+    Ok((saved, state.sxperformance.get_diagnostics()))
+}
+
+#[tauri::command]
+fn trigger_sxperformance_bypass(
+    state: State<'_, Arc<EngineState>>,
+) -> Result<(SxPerformanceConfig, SxPerformanceDiagnostics), String> {
+    let saved = state.sxperformance.emergency_bypass()?;
+    Ok((saved, state.sxperformance.get_diagnostics()))
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.unminimize();
@@ -1222,6 +1399,74 @@ fn spawn_profile_watcher(engine: Arc<EngineState>, app: AppHandle) {
         .expect("profile watcher thread spawn failed");
 }
 
+fn spawn_hardware_watcher(engine: Arc<EngineState>, app: AppHandle) {
+    std::thread::Builder::new()
+        .name("sxmcaps-hw-watch".to_string())
+        .spawn(move || {
+            let mut last_device_id = String::new();
+            let mut last_state_sig = String::new();
+            let mut tick = 0u64;
+            loop {
+                std::thread::sleep(Duration::from_millis(650));
+                tick = tick.wrapping_add(1);
+
+                if engine.sxlighting.is_streaming() {
+                    continue;
+                }
+
+                let mut watched_id = engine
+                    .watched_device_id
+                    .read()
+                    .map(|g| g.clone())
+                    .unwrap_or_default();
+
+                if watched_id.is_empty() && tick % 4 == 1 {
+                    let devs = discover_all_devices();
+                    if let Some(d) = devs
+                        .into_iter()
+                        .find(|d| d.online && d.capabilities.communication_supported)
+                    {
+                        watched_id = d.id.clone();
+                        if let Ok(mut w) = engine.watched_device_id.write() {
+                            *w = watched_id.clone();
+                        }
+                    }
+                }
+
+                if watched_id.is_empty() {
+                    continue;
+                }
+
+                if watched_id != last_device_id {
+                    last_device_id = watched_id.clone();
+                    last_state_sig.clear();
+                }
+
+                let Ok(drv) = engine.get_or_open_driver(&watched_id) else {
+                    continue;
+                };
+
+                let info = drv.device_info();
+                if !info.online || !info.capabilities.communication_supported || !info.permission_ok
+                {
+                    continue;
+                }
+                if info.link != drivers::ConnectionLink::Wired && tick % 3 != 0 {
+                    continue;
+                }
+
+                if let Ok(Some(hw_state)) = drv.poll_live_state() {
+                    let sig = serde_json::to_string(&hw_state).unwrap_or_default();
+                    if sig != last_state_sig {
+                        last_state_sig = sig;
+                        let _ = app.emit("sxmcaps://hardware-state", hw_state);
+                    }
+                }
+            }
+        })
+        .expect("hardware watcher thread spawn failed");
+}
+
 pub fn run() {
     let mut initial_settings = load_settings();
     initial_settings.autostart = is_autostart_enabled();
@@ -1231,6 +1476,24 @@ pub fn run() {
     let stats = StatsManager::load();
 
     let workspace = load_workspace_store();
+    let app_handle_cell: Arc<OnceLock<AppHandle>> = Arc::new(OnceLock::new());
+
+    let app_cell_light = Arc::clone(&app_handle_cell);
+    let sxlighting = Arc::new(SxLightingEngine::start(move |frame| {
+        if let Some(app) = app_cell_light.get() {
+            let _ = app.emit("sxmcaps://lighting-frame", frame);
+        }
+    }));
+
+    let app_cell_perf = Arc::clone(&app_handle_cell);
+    let sxperformance = Arc::new(SxPerformanceEngine::start(move |web_code, is_down| {
+        if let Some(app) = app_cell_perf.get() {
+            let _ = app.emit(
+                "sxmcaps://performance-transformed",
+                serde_json::json!({ "web_code": web_code, "is_down": is_down }),
+            );
+        }
+    }));
 
     let engine = Arc::new(EngineState {
         audio,
@@ -1243,6 +1506,10 @@ pub fn run() {
         profile_override: Mutex::new(None),
         driver_cache: RwLock::new(HashMap::new()),
         workspace_store: Mutex::new(workspace),
+        sxlighting,
+        sxperformance,
+        watched_device_id: RwLock::new(String::new()),
+        app_handle_cell,
     });
 
     let engine_setup = Arc::clone(&engine);
@@ -1251,6 +1518,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(engine)
         .setup(move |app| {
+            let _ = engine_setup.app_handle_cell.set(app.handle().clone());
+
             let roots = collect_builtin_roots(app.handle());
             if let Ok(mut g) = engine_setup.builtin_roots.write() {
                 *g = roots;
@@ -1263,6 +1532,7 @@ pub fn run() {
             let listener = start_global_listener(move |ev| match ev {
                 GlobalInputEvent::Key { web_code, is_down } => {
                     engine_ev.play_key_event(web_code, is_down);
+                    engine_ev.sxlighting.notify_key_event(web_code, is_down);
                     let total = if is_down {
                         engine_ev.stats.record_key(web_code)
                     } else {
@@ -1302,8 +1572,9 @@ pub fn run() {
             }
 
             spawn_profile_watcher(Arc::clone(&engine_setup), app.handle().clone());
+            spawn_hardware_watcher(Arc::clone(&engine_setup), app.handle().clone());
 
-            let show_item = MenuItem::with_id(app, "show", "sxmcaps Göster", true, None::<&str>)?;
+            let show_item = MenuItem::with_id(app, "show", "SxmCaps Göster", true, None::<&str>)?;
             let toggle_item =
                 MenuItem::with_id(app, "toggle", "Sesi Aç / Kapat", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Çıkış", true, None::<&str>)?;
@@ -1312,7 +1583,7 @@ pub fn run() {
             let engine_tray = Arc::clone(&engine_setup);
             let mut tray_builder = TrayIconBuilder::with_id("sxmcaps-tray")
                 .menu(&menu)
-                .tooltip("sxmcaps — Mechanical Keycap Sounds")
+                .tooltip("SxmCaps — Keycap Sound & Peripheral Studio")
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "show" => show_main_window(app),
                     "toggle" => {
@@ -1412,6 +1683,17 @@ pub fn run() {
             delete_sxboard_preset,
             save_sxboard_macros,
             flash_macros_to_device,
+            set_watched_hardware_device,
+            get_sxlighting_state,
+            apply_sxlighting_config,
+            stop_sxlighting,
+            save_sxlighting_preset,
+            delete_sxlighting_preset,
+            export_sxlighting_preset_file,
+            import_sxlighting_preset_file,
+            get_sxperformance_state,
+            update_sxperformance_config,
+            trigger_sxperformance_bypass,
         ])
         .run(tauri::generate_context!())
         .expect("error while running sxmcaps");

@@ -1,18 +1,20 @@
-# SxBoards (`sxmcaps`)
+# SxmCaps (`sxmcaps`)
 
-Universal HID peripheral driver & low-latency mechanical keyboard/mouse sound platform built with Rust, Tauri v2, `hidapi`, CPAL/Rodio, and native global input hooks (`evdev` on Linux, Win32 `WH_KEYBOARD_LL`/`WH_MOUSE_LL` on Windows, `CGEventTap` on macOS).
+Monochrome desktop peripheral & acoustic suite combining hardware-aware HID control (**SxBoards**), a 24-effect procedural lighting compositor (**SxLighting**), opt-in kernel-level input transforms (**SxPerformance**), and real-time mechanical switch / mouse sound synthesis (`Rust`, `Tauri v2`, `hidapi`, `CPAL/Rodio`, `evdev` / Win32 / `CGEventTap`).
 
-## Features (v0.3.0 — SxBoards Platform)
+## What's New in `v0.4.0`
 
-- **Obsidian-Violet SxBoards Studio UI**: Left vertical icon navigation rail (`Devices`, `Effects`, `Keys`, `Macros`, `Sound`, `Stats`, `System`), workspace top preset toolbar (`OVERWRITE PRESET`, `SAVE IN ACTIVE`, `+ NEW PRESET`), and an interactive AULA F75 hardware deck with glowing side light strip, metallic rotary knob, floating key reassignment callout pills, and bilingual i18n (`Auto` / `Türkçe` / `English`).
-- **Modular Hardware Driver Architecture (`drivers/`)**: Automatic USB/2.4G/Bluetooth HID discovery with truthful capability negotiation:
-  - **AULA F75 Native Protocol (`258a:010c` USB-C Wired & `3554:fa09` 2.4G Wireless)**: 20 firmware RGB effects, 90-key Per-Key RGB planar flashing, Side Light (`0x04`) & Rotary Knob (`Media` / `RGB`), OS mode (`Windows` / `Mac`), Win Lock, sleep timer, 4-layer Keymap Matrix read/write (`Base` / `FN` layers with factory Layer-0 restore), onboard macro buffer flashing, and readback guardrails (`5A A5` tail verification & packet pacing).
-  - **Generic Peripheral Discovery**: Lists connected USB/HID mice, keyboards, and audio devices safely with truthful capability reporting.
-- **Unified Sound Engine (20 Built-in Mechvibes Packs + 8 Pack Hub Packs)**: Real mechanical switch and mouse samples, real-time 3-band stereo biquad EQ & plate Acoustic DSP (`Aluminum`, `Polycarbonate`, `Brass`, `Tape Mod`, `Poron Foam`, `Room Ambience`), Soundpack Studio slicer/exporter, Per-App auto profiles, and one-click `.zip`/folder import.
-- **Violet Analytics Dashboard**: Usage metrics (`Total Keystrokes`, `Mouse Clicks`, `Peak WPM`), glowing violet 14-day vertical bar columns & trend curve, and violet per-key heatmap.
-- **Cross-Platform Global Input & Linux HID Setup**:
-  - **Linux (Wayland / Hyprland & X11)**: Native `/dev/input/event*` (`evdev`) listener + `/dev/hidraw*` permission rules (`65-sxmcaps-input.rules` & `70-sxboards-hid.rules`) via one-click `pkexec`.
-  - **Windows / macOS**: Native `WH_KEYBOARD_LL`/`WH_MOUSE_LL` (Windows) and `CGEventTap` (macOS) hooks + `hidapi` direct USB HID access.
+- **Monochrome Black & White Bento Studio UI**: Redesigned **`SxmCaps`** dashboard featuring a `#050506` obsidian canvas, `#111114` hairline Bento cards, white pill active controls, unified `Overview` Control Hub, and truthful hardware classification (`Keyboard`, `Mouse`, `Headset`).
+- **Live FN Hardware Sync (`AULA F75`)**: Polls USB/2.4G firmware state via `spawn_hardware_watcher` (`sxmcaps://hardware-state`) so physical `FN` key combinations and rotary knob adjustments update the UI in real time.
+- **Accurate Device Classification & Graceful Unsupported Handling**: Multi-interface USB VID:PID grouping classifies mice (`Furylevel Z1`, etc.) and wireless headsets (`Fuxi-H3`, etc.) accurately, renders device-appropriate views, and clearly states when a device provides no vendor communication protocol.
+- **SxLighting Compositor (`24` Effects + `.sxl` Presets)**: Normalized `(x, y)` LED matrix compositor supporting `Static`, `Dynamic`, `Reactive`, and `Audio-Reactive` effects, 5 blend modes, live preview streaming (`sxmcaps://lighting-frame`), JSON `.sxl` import/export, and throttled USB per-key flashing.
+- **SxPerformance Engine (Opt-In `evdev -> uinput`)**: Low-latency transform pipeline with **SOCD** (`Off` / `LastInput` / `FirstInput` / `Neutral`), **Mod-Tap**, **Tap-Dance**, **One-Shot Modifiers**, custom **Remaps**, loopback audio exclusion (`SxmCaps Virtual`), **Emergency Bypass**, and `avg` / `p95` / `max` software processing latency metrics.
+
+## Core Platform Capabilities
+
+- **SxBoards Driver Panel (`drivers/`)**:
+  - **AULA F75 (`258a:010c` USB-C Wired & `3554:fa09` 2.4G Wireless)**: 20 firmware RGB effects, 90-key Per-Key RGB planar flashing, Side Light (`0x04`) & Rotary Knob (`Media` / `RGB`), OS mode (`Windows` / `Mac`), Win Lock, sleep timer, 4-layer Keymap Matrix read/write (`Base` / `FN` layers), onboard macro buffer flashing, and `5A A5` readback verification.
+- **Unified Sound Engine (`20` Built-in Mechvibes Packs + `8` Pack Hub Packs)**: Real mechanical switch and mouse samples, 3-band stereo biquad EQ & Acoustic DSP (`Aluminum`, `Polycarbonate`, `Brass`, `Tape Mod`, `Poron Foam`, `Room Ambience`), Soundpack Studio WAV slicer/exporter, Per-App auto profiles, and bilingual UI (`Auto` / `Türkçe` / `English`).
 
 ## Development & Build
 
@@ -21,8 +23,10 @@ npm install
 npm run tauri dev
 ```
 
-Production build:
+Run tests & production build:
 
 ```bash
-npm run tauri build
+cargo test --manifest-path src-tauri/Cargo.toml
+npm run build
+NO_STRIP=true npm run tauri build -- --bundles appimage
 ```

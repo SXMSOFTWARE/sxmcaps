@@ -1,7 +1,7 @@
 [package]
 name = "sxmcaps"
-version = "0.3.0"
-description = "sxmcaps - Low-latency mechanical keyboard & mouse sound simulator"
+version = "0.4.0"
+description = "SxmCaps - Mechanical keycap sound studio, SxBoards peripheral driver, SxLighting & SxPerformance"
 authors = ["sxmcaps"]
 edition = "2021"
 rust-version = "1.77"
