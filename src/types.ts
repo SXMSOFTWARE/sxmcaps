@@ -32,6 +32,8 @@ export interface AppSettings {
   profiles_enabled: boolean;
   app_profiles: AppProfileRule[];
   autostart: boolean;
+  // v0.2.1 Localization ("auto" | "tr" | "en")
+  language: string;
 }
 
 export interface SoundpackInfo {

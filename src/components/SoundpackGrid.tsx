@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { HubPackEntry, SoundpackInfo } from '../types';
+import { useI18n } from '../i18n';
 import {
   Check,
   CloudDownload,
@@ -19,29 +20,47 @@ interface SoundpackGridProps {
   onLoadHubCatalog: () => Promise<void>;
   onInstallHubPack: (url: string) => Promise<void>;
   onSelectKeyboard: (id: string) => void;
+  onSelectMouse: (id: string) => void;
   onPreview: (id: string) => void;
   onDeleteCustom: (id: string) => void;
   onExportZip: (id: string) => void;
 }
 
 const CATEGORIES = [
-  { id: 'all', label: 'Tümü' },
+  { id: 'all', labelKey: 'catAll' as const },
   { id: 'tactile', label: 'Tactile' },
   { id: 'linear', label: 'Linear' },
   { id: 'clicky', label: 'Clicky' },
   { id: 'thocky', label: 'Thocky' },
-  { id: 'other', label: 'Klasik / Özel' },
+  { id: 'other', labelKey: 'catOther' as const },
 ] as const;
 
 type CategoryId = (typeof CATEGORIES)[number]['id'];
 
 function matchesCategory(pack: SoundpackInfo, cat: CategoryId): boolean {
   if (cat === 'all') return true;
-  const t = pack.tag.toLowerCase();
-  if (cat === 'tactile') return t.includes('tactile');
-  if (cat === 'linear') return t.includes('linear');
-  if (cat === 'clicky') return t.includes('clicky') || t.includes('buckling');
-  if (cat === 'thocky') return t.includes('thock') || t.includes('capacitive');
+  const t = `${pack.tag} ${pack.name}`.toLowerCase();
+  if (cat === 'tactile')
+    return (
+      t.includes('tactile') ||
+      t.includes('brown') ||
+      t.includes('panda') ||
+      t.includes('crystal') ||
+      t.includes('oreo')
+    );
+  if (cat === 'linear')
+    return (
+      t.includes('linear') ||
+      t.includes('red') ||
+      t.includes('black') ||
+      t.includes('cream') ||
+      t.includes('turquoise') ||
+      t.includes('tealios')
+    );
+  if (cat === 'clicky')
+    return t.includes('clicky') || t.includes('blue') || t.includes('buckling');
+  if (cat === 'thocky')
+    return t.includes('thock') || t.includes('capacitive') || t.includes('topre');
   if (cat === 'other') {
     return (
       !pack.is_builtin ||
@@ -60,10 +79,12 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
   onLoadHubCatalog,
   onInstallHubPack,
   onSelectKeyboard,
+  onSelectMouse,
   onPreview,
   onDeleteCustom,
   onExportZip,
 }) => {
+  const { t } = useI18n();
   const [viewMode, setViewMode] = useState<'local' | 'hub'>('local');
   const [category, setCategory] = useState<CategoryId>('all');
   const [search, setSearch] = useState('');
@@ -76,10 +97,19 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
     }
   }, [viewMode, hubCatalog.length, onLoadHubCatalog]);
 
-  const installedIds = useMemo(
-    () => new Set(soundpacks.map((p) => p.id)),
+  const installedById = useMemo(
+    () => new Map(soundpacks.map((p) => [p.id, p])),
     [soundpacks]
   );
+
+  const installedByName = useMemo(
+    () => new Map(soundpacks.map((p) => [p.name.trim().toLowerCase(), p])),
+    [soundpacks]
+  );
+
+  const findInstalled = (entry: HubPackEntry): SoundpackInfo | undefined =>
+    installedById.get(entry.id) ??
+    installedByName.get(entry.name.trim().toLowerCase());
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -119,7 +149,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
             }`}
           >
             <Package className="h-3.5 w-3.5" />
-            Kütüphane
+            {t.packs.library}
           </button>
           <button
             type="button"
@@ -131,7 +161,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
             }`}
           >
             <Globe className="h-3.5 w-3.5" />
-            Pack Hub
+            {t.packs.hub}
           </button>
         </div>
 
@@ -139,6 +169,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
           <div className="flex flex-wrap items-center gap-1">
             {CATEGORIES.map((c) => {
               const active = category === c.id;
+              const label = 'labelKey' in c ? t.packs[c.labelKey] : c.label;
               return (
                 <button
                   key={c.id}
@@ -150,7 +181,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                       : 'border-white/10 bg-[#121216] text-zinc-400 hover:border-white/25 hover:text-white'
                   }`}
                 >
-                  {c.label}
+                  {label}
                 </button>
               );
             })}
@@ -163,7 +194,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Switch ara..."
+            placeholder={t.packs.searchPlaceholder}
             className="w-full bg-transparent text-xs text-white placeholder-zinc-600 outline-none"
           />
         </div>
@@ -217,9 +248,14 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                 </div>
 
                 <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-2.5">
-                  <span className="flex items-center gap-1 text-[10px] text-zinc-500">
+                  <span className="flex items-center gap-1.5 text-[10px] text-zinc-500">
                     <Package className="h-3 w-3" />
-                    {pack.is_builtin ? 'Dahili' : pack.format}
+                    {pack.is_builtin ? t.packs.builtin : pack.format}
+                    {!pack.is_builtin && (
+                      <span className="rounded border border-white/20 bg-white/10 px-1.5 py-0.2 text-[9px] font-semibold text-zinc-200">
+                        {t.packs.installedBadge}
+                      </span>
+                    )}
                   </span>
 
                   <div className="flex items-center gap-1">
@@ -231,7 +267,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                             e.stopPropagation();
                             onExportZip(pack.id);
                           }}
-                          title="ZIP olarak dışa aktar"
+                          title={t.packs.exportZipTitle}
                           className="cursor-pointer rounded p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white"
                         >
                           <Download className="h-3.5 w-3.5" />
@@ -242,7 +278,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                             e.stopPropagation();
                             onDeleteCustom(pack.id);
                           }}
-                          title="Özel paketi sil"
+                          title={t.packs.deleteTitle}
                           className="cursor-pointer rounded p-1 text-zinc-500 transition hover:bg-white/10 hover:text-white"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -259,7 +295,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                       className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-zinc-100 transition hover:border-white hover:bg-white hover:text-black"
                     >
                       <Play className="h-3 w-3 fill-current" />
-                      Test
+                      {t.packs.test}
                     </button>
                   </div>
                 </div>
@@ -269,7 +305,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
 
           {filtered.length === 0 && (
             <div className="col-span-full flex items-center justify-center py-12 text-xs text-zinc-500">
-              Bu kategoride veya aramada eşleşen switch paketi bulunamadı.
+              {t.packs.emptyFilter}
             </div>
           )}
         </div>
@@ -282,7 +318,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
               type="text"
               value={customUrl}
               onChange={(e) => setCustomUrl(e.target.value)}
-              placeholder="Doğrudan .zip ses paketi URL'si yapıştırın (https://.../pack.zip)"
+              placeholder={t.packs.urlPlaceholder}
               className="min-w-48 flex-1 bg-transparent text-xs text-white placeholder-zinc-600 outline-none"
             />
             <button
@@ -292,7 +328,9 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-zinc-200 disabled:opacity-40"
             >
               <CloudDownload className="h-3.5 w-3.5" />
-              {installingId === 'custom-url' ? 'İndiriliyor...' : 'URL’den Kur'}
+              {installingId === 'custom-url'
+                ? t.packs.installing
+                : t.packs.installFromUrl}
             </button>
           </div>
 
@@ -305,7 +343,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                   p.tag.toLowerCase().includes(search.toLowerCase())
               )
               .map((entry) => {
-                const isInstalled = installedIds.has(entry.id);
+                const installedPack = findInstalled(entry);
                 const busy = installingId === entry.id;
                 return (
                   <div
@@ -331,17 +369,21 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                         {entry.size_kb} KB • {entry.author}
                       </span>
 
-                      {isInstalled ? (
+                      {installedPack ? (
                         <button
                           type="button"
                           onClick={() => {
-                            onSelectKeyboard(entry.id);
-                            setViewMode('local');
+                            if (installedPack.device_type === 'mouse') {
+                              onSelectMouse(installedPack.id);
+                            } else {
+                              onSelectKeyboard(installedPack.id);
+                              setViewMode('local');
+                            }
                           }}
                           className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white bg-white px-2.5 py-1 text-[11px] font-semibold text-black"
                         >
                           <Check className="h-3 w-3" />
-                          Kurulu • Seç
+                          {t.packs.hubInstalledSelect}
                         </button>
                       ) : (
                         <button
@@ -351,7 +393,7 @@ export const SoundpackGrid: React.FC<SoundpackGridProps> = ({
                           className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white/25 bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white transition hover:border-white hover:bg-white hover:text-black disabled:opacity-50"
                         >
                           <CloudDownload className="h-3.5 w-3.5" />
-                          {busy ? 'Kuruluyor...' : 'İndir & Kur'}
+                          {busy ? t.packs.hubInstalling : t.packs.hubInstall}
                         </button>
                       )}
                     </div>

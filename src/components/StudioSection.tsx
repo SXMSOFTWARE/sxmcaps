@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AudioInspectResult, StudioKeyMapping, StudioPackSpec } from '../types';
+import { useI18n } from '../i18n';
 import {
   AudioWaveform,
   FileAudio,
@@ -31,23 +32,12 @@ interface DraftRow {
   upDurationMs: number;
 }
 
-const KEY_TARGETS = [
-  { code: 'Default', label: 'Varsayılan (Tüm Tuşlar)' },
-  { code: 'Space', label: 'Spacebar' },
-  { code: 'Enter', label: 'Enter' },
-  { code: 'Backspace', label: 'Backspace' },
-  { code: 'ShiftLeft', label: 'Shift (Sol)' },
-  { code: 'ShiftRight', label: 'Shift (Sağ)' },
-  { code: 'Escape', label: 'Escape' },
-  { code: 'Tab', label: 'Tab' },
-  { code: 'KeyA', label: 'KeyA' },
-];
-
 export const StudioSection: React.FC<StudioSectionProps> = ({
   onPickAudio,
   onPreviewSlice,
   onSavePack,
 }) => {
+  const { t } = useI18n();
   const [name, setName] = useState('');
   const [tag, setTag] = useState('Custom');
   const [author, setAuthor] = useState('sxmcaps Studio');
@@ -65,6 +55,18 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
       upDurationMs: 90,
     },
   ]);
+
+  const keyTargets = [
+    { code: 'Default', label: t.studio.defaultKey },
+    { code: 'Space', label: 'Spacebar' },
+    { code: 'Enter', label: 'Enter' },
+    { code: 'Backspace', label: 'Backspace' },
+    { code: 'ShiftLeft', label: t.studio.shiftLeft },
+    { code: 'ShiftRight', label: t.studio.shiftRight },
+    { code: 'Escape', label: 'Escape' },
+    { code: 'Tab', label: 'Tab' },
+    { code: 'KeyA', label: 'KeyA' },
+  ];
 
   const updateRow = (id: string, patch: Partial<DraftRow>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -90,7 +92,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
 
   const addMappingRow = () => {
     const used = new Set(rows.map((r) => r.webCode));
-    const next = KEY_TARGETS.find((k) => !used.has(k.code))?.code ?? 'KeyE';
+    const next = keyTargets.find((k) => !used.has(k.code))?.code ?? 'KeyE';
     setRows((prev) => [
       ...prev,
       {
@@ -124,7 +126,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
         name: name.trim(),
         tag,
         author,
-        description: description.trim() || `${name.trim()} özel stüdyo paketi`,
+        description: description.trim() || t.studio.defaultDesc(name.trim()),
         mappings,
       });
       setName('');
@@ -143,24 +145,27 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
       <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0b0b0e] p-4 lg:col-span-4">
         <div className="flex items-center gap-2 border-b border-white/[0.07] pb-2.5 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
           <Scissors className="h-3.5 w-3.5 text-white" />
-          Ses Paketi Stüdyosu
+          {t.studio.title}
         </div>
 
         <p className="text-[11px] leading-relaxed text-zinc-400">
-          Kendi <code className="rounded bg-white/10 px-1 text-zinc-200">.wav/.ogg/.mp3</code>{' '}
-          ses dosyalarınızı seçin, dalga formu üzerinden kırpın ve Mechvibes V2 uyumlu paket olarak kaydedin.
+          {t.studio.introBefore}{' '}
+          <code className="rounded bg-white/10 px-1 text-zinc-200">
+            .wav/.ogg/.mp3
+          </code>{' '}
+          {t.studio.introAfter}
         </p>
 
         <div className="space-y-2.5">
           <div>
             <label className="mb-1 block text-[11px] text-zinc-400">
-              Paket Adı *
+              {t.studio.packName}
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Örn. Custom Alps Cream"
+              placeholder={t.studio.packNamePlaceholder}
               className="w-full rounded-lg border border-white/15 bg-[#050506] px-3 py-2 text-xs text-white placeholder-zinc-600 outline-none focus:border-white"
             />
           </div>
@@ -168,7 +173,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="mb-1 block text-[11px] text-zinc-400">
-                Kategori
+                {t.studio.category}
               </label>
               <select
                 value={tag}
@@ -184,7 +189,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
             </div>
             <div>
               <label className="mb-1 block text-[11px] text-zinc-400">
-                Üretici / Yazar
+                {t.studio.author}
               </label>
               <input
                 type="text"
@@ -197,13 +202,13 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
 
           <div>
             <label className="mb-1 block text-[11px] text-zinc-400">
-              Açıklama
+              {t.studio.description}
             </label>
             <textarea
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Switch karakterini kısaca açıklayın..."
+              placeholder={t.studio.descPlaceholder}
               className="w-full resize-none rounded-lg border border-white/15 bg-[#050506] px-3 py-2 text-xs text-white placeholder-zinc-600 outline-none focus:border-white"
             />
           </div>
@@ -216,7 +221,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
           className="mt-auto inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Save className="h-4 w-4" />
-          {saving ? 'Kaydediliyor...' : 'Paketi Oluştur & Aktifleştir'}
+          {saving ? t.studio.saving : t.studio.createAndActivate}
         </button>
       </div>
 
@@ -225,7 +230,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
         <div className="flex items-center justify-between border-b border-white/[0.07] pb-2.5">
           <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
             <AudioWaveform className="h-3.5 w-3.5 text-white" />
-            Tuş Eşleştirmeleri & Dalga Formu Kırpıcı
+            {t.studio.mappingsTitle}
           </div>
 
           <button
@@ -234,7 +239,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
             className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-white/20 bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-white hover:bg-white hover:text-black"
           >
             <Plus className="h-3.5 w-3.5" />
-            Tuş Ekle
+            {t.studio.addKey}
           </button>
         </div>
 
@@ -252,7 +257,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                   }
                   className="cursor-pointer rounded-lg border border-white/15 bg-[#121216] px-2.5 py-1.5 text-xs font-semibold text-white outline-none"
                 >
-                  {KEY_TARGETS.map((k) => (
+                  {keyTargets.map((k) => (
                     <option key={k.code} value={k.code}>
                       {k.label}
                     </option>
@@ -266,7 +271,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                     className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/20 bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-white hover:text-black"
                   >
                     <FileAudio className="h-3.5 w-3.5" />
-                    {row.downAudio ? row.downAudio.file_name : 'Basış Sesi Seç *'}
+                    {row.downAudio ? row.downAudio.file_name : t.studio.pickDown}
                   </button>
 
                   <button
@@ -275,7 +280,9 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                     className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-[#121216] px-2.5 py-1 text-[11px] text-zinc-300 hover:border-white/30 hover:text-white"
                   >
                     <FileAudio className="h-3.5 w-3.5" />
-                    {row.upAudio ? `Up: ${row.upAudio.file_name}` : 'Key-Up (Opsiyonel)'}
+                    {row.upAudio
+                      ? `Up: ${row.upAudio.file_name}`
+                      : t.studio.pickUpOptional}
                   </button>
 
                   {rows.length > 1 && (
@@ -320,7 +327,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                   <div className="flex flex-wrap items-center gap-3 text-[11px]">
                     <div className="flex flex-1 items-center gap-2">
                       <span className="shrink-0 text-zinc-400">
-                        Başlangıç ({row.downStartMs}ms)
+                        {t.studio.start} ({row.downStartMs}ms)
                       </span>
                       <input
                         type="range"
@@ -339,7 +346,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
 
                     <div className="flex flex-1 items-center gap-2">
                       <span className="shrink-0 text-zinc-400">
-                        Süre ({row.downDurationMs}ms)
+                        {t.studio.duration} ({row.downDurationMs}ms)
                       </span>
                       <input
                         type="range"
@@ -368,7 +375,7 @@ export const StudioSection: React.FC<StudioSectionProps> = ({
                       className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white/20 bg-white/[0.08] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-white hover:text-black"
                     >
                       <Play className="h-3 w-3 fill-current" />
-                      Dinle
+                      {t.studio.listen}
                     </button>
                   </div>
                 </div>

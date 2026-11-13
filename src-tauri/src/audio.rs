@@ -18,16 +18,38 @@ pub struct AudioClip {
 
 impl AudioClip {
     pub fn decode_file(path: &Path) -> Result<Self, String> {
-        let file = File::open(path)
-            .map_err(|e| format!("Ses dosyası açılamadı ({}): {e}", path.display()))?;
-        let reader = BufReader::new(file);
-        let decoder = rodio::Decoder::new(reader)
-            .map_err(|e| format!("Ses çözümlenemedi ({}): {e}", path.display()))?;
+        let is_ogg = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("ogg"))
+            .unwrap_or(false);
 
-        let channels = decoder.channels().max(1) as usize;
-        let sample_rate = decoder.sample_rate().max(8000);
+        let raw_samples: Result<(usize, u32, Vec<i16>), String> = (|| {
+            let file = File::open(path)
+                .map_err(|e| format!("Ses dosyası açılamadı ({}): {e}", path.display()))?;
+            let reader = BufReader::new(file);
+            match rodio::Decoder::new(reader) {
+                Ok(dec) => {
+                    let ch = dec.channels().max(1) as usize;
+                    let sr = dec.sample_rate().max(8000);
+                    Ok((ch, sr, dec.collect()))
+                }
+                Err(first_err) => {
+                    if is_ogg {
+                        if let Ok(file2) = File::open(path) {
+                            if let Ok(dec2) = rodio::Decoder::new_vorbis(BufReader::new(file2)) {
+                                let ch = dec2.channels().max(1) as usize;
+                                let sr = dec2.sample_rate().max(8000);
+                                return Ok((ch, sr, dec2.collect()));
+                            }
+                        }
+                    }
+                    Err(format!("Ses çözümlenemedi ({}): {first_err}", path.display()))
+                }
+            }
+        })();
 
-        let raw: Vec<i16> = decoder.collect();
+        let (channels, sample_rate, raw) = raw_samples?;
         if raw.is_empty() {
             return Err(format!("Boş ses dosyası: {}", path.display()));
         }
@@ -49,8 +71,17 @@ impl AudioClip {
     }
 
     pub fn slice_ms(&self, start_ms: u64, duration_ms: u64) -> Self {
-        let start_idx = ((start_ms as f64 / 1000.0) * self.sample_rate as f64) as usize;
-        let len_samples = ((duration_ms as f64 / 1000.0) * self.sample_rate as f64) as usize;
+        self.slice_ms_f64(start_ms as f64, duration_ms as f64)
+    }
+
+    pub fn slice_range_ms(&self, start_ms: f64, end_ms: f64) -> Self {
+        let dur = (end_ms - start_ms).max(1.0);
+        self.slice_ms_f64(start_ms, dur)
+    }
+
+    pub fn slice_ms_f64(&self, start_ms: f64, duration_ms: f64) -> Self {
+        let start_idx = ((start_ms.max(0.0) / 1000.0) * self.sample_rate as f64).round() as usize;
+        let len_samples = ((duration_ms.max(0.0) / 1000.0) * self.sample_rate as f64).round() as usize;
 
         if start_idx >= self.samples.len() || len_samples == 0 {
             return Self {
@@ -62,11 +93,11 @@ impl AudioClip {
         let end_idx = (start_idx + len_samples).min(self.samples.len());
         let mut sliced = self.samples[start_idx..end_idx].to_vec();
 
-        let fade_in = ((self.sample_rate as usize) / 500).min(sliced.len() / 4);
+        let fade_in = ((self.sample_rate as usize) / 800).min(sliced.len() / 4);
         for (i, sample) in sliced.iter_mut().take(fade_in).enumerate() {
             *sample *= (i as f32) / (fade_in.max(1) as f32);
         }
-        let fade_out = ((self.sample_rate as usize) / 200).min(sliced.len() / 3);
+        let fade_out = ((self.sample_rate as usize) / 250).min(sliced.len() / 3);
         let len = sliced.len();
         for i in 0..fade_out {
             sliced[len - 1 - i] *= (i as f32) / (fade_out.max(1) as f32);

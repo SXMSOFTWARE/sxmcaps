@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { KEYBOARD_ROWS, KeyCapDef } from '../keymap';
+import { useI18n } from '../i18n';
 import { ChevronDown, ChevronUp, Keyboard } from 'lucide-react';
 
 interface KeyboardVisualizerProps {
@@ -11,12 +12,6 @@ interface KeyboardVisualizerProps {
   onKeyPress: (code: string, isDown: boolean) => void;
 }
 
-const SAMPLE_PROMPTS = [
-  'hızlı kahverengi tilki tembel köpeğin üzerinden atlar',
-  'sxmcaps ile her tuş vuruşu mekanik bir ritme dönüşür',
-  'the quick brown fox jumps over the lazy dog 1234567890',
-];
-
 export const KeyboardVisualizer: React.FC<KeyboardVisualizerProps> = ({
   pressedKeys,
   activePackName,
@@ -25,10 +20,13 @@ export const KeyboardVisualizer: React.FC<KeyboardVisualizerProps> = ({
   lastKeyLabel,
   onKeyPress,
 }) => {
+  const { t } = useI18n();
   const [sandboxText, setSandboxText] = useState('');
   const [promptIdx, setPromptIdx] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const mouseDownKeyRef = useRef<string | null>(null);
+  const prompts = t.kb.prompts;
+  const activePrompt = prompts[promptIdx % prompts.length];
 
   const handleMouseDown = (key: KeyCapDef) => {
     mouseDownKeyRef.current = key.code;
@@ -80,12 +78,12 @@ export const KeyboardVisualizer: React.FC<KeyboardVisualizerProps> = ({
             {collapsed ? (
               <>
                 <ChevronDown className="h-3.5 w-3.5" />
-                Klavyeyi Göster
+                {t.kb.show}
               </>
             ) : (
               <>
                 <ChevronUp className="h-3.5 w-3.5" />
-                Gizle
+                {t.kb.hide}
               </>
             )}
           </button>
@@ -167,7 +165,7 @@ export const KeyboardVisualizer: React.FC<KeyboardVisualizerProps> = ({
               type="text"
               value={sandboxText}
               onChange={(e) => setSandboxText(e.target.value)}
-              placeholder={`Test etmek için yazın: "${SAMPLE_PROMPTS[promptIdx]}"`}
+              placeholder={t.kb.placeholder(activePrompt)}
               className="w-full bg-transparent text-xs text-white placeholder-zinc-600 outline-none"
             />
             {sandboxText && (
@@ -175,11 +173,11 @@ export const KeyboardVisualizer: React.FC<KeyboardVisualizerProps> = ({
                 type="button"
                 onClick={() => {
                   setSandboxText('');
-                  setPromptIdx((i) => (i + 1) % SAMPLE_PROMPTS.length);
+                  setPromptIdx((i) => (i + 1) % prompts.length);
                 }}
                 className="shrink-0 cursor-pointer rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-zinc-300 hover:bg-white/15 hover:text-white"
               >
-                Temizle
+                {t.kb.clear}
               </button>
             )}
           </div>

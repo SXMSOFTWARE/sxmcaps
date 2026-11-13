@@ -38,44 +38,84 @@ pub struct UpdateCheckResult {
 fn embedded_fallback_catalog() -> Vec<HubPackEntry> {
     vec![
         HubPackEntry {
-            id: "gateron-milky-yellow".to_string(),
-            name: "Gateron Milky Yellow".to_string(),
+            id: "mxblack-travel".to_string(),
+            name: "Cherry MX Black (Full Travel)".to_string(),
             tag: "Linear".to_string(),
-            description: "Sütlü nylon gövdeli, pürüzsüz ve kremsi klasik lineer karakter".to_string(),
-            author: "sxmcaps Pack Hub".to_string(),
+            description: "Real Cherry MX Black full-travel key press & release microphone recordings.".to_string(),
+            author: "Mechvibes Community".to_string(),
             device_type: "keyboard".to_string(),
-            size_kb: 95.1,
-            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/gateron-milky-yellow.zip".to_string(),
+            size_kb: 20.1,
+            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mxblack-travel.zip".to_string(),
         },
         HubPackEntry {
-            id: "gazzew-boba-u4t".to_string(),
-            name: "Gazzew Boba U4T".to_string(),
-            tag: "Thocky".to_string(),
-            description: "Keskin uzun direkli D-tümsekli sert tactile ve derin tok thock".to_string(),
-            author: "sxmcaps Pack Hub".to_string(),
+            id: "mxblue-travel".to_string(),
+            name: "Cherry MX Blue (Full Travel)".to_string(),
+            tag: "Clicky".to_string(),
+            description: "Real Cherry MX Blue click-jacket press & release recordings with crisp Space/Enter.".to_string(),
+            author: "Mechvibes Community".to_string(),
             device_type: "keyboard".to_string(),
-            size_kb: 98.5,
-            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/gazzew-boba-u4t.zip".to_string(),
+            size_kb: 9.9,
+            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mxblue-travel.zip".to_string(),
         },
         HubPackEntry {
-            id: "novelkeys-cream".to_string(),
-            name: "NovelKeys Cream".to_string(),
-            tag: "Linear".to_string(),
-            description: "Tam POM gövde ile keskin, net ve karakteristik clack sesi".to_string(),
-            author: "sxmcaps Pack Hub".to_string(),
-            device_type: "keyboard".to_string(),
-            size_kb: 92.8,
-            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/novelkeys-cream.zip".to_string(),
-        },
-        HubPackEntry {
-            id: "akko-cream-blue".to_string(),
-            name: "Akko V3 Cream Blue".to_string(),
+            id: "mxbrown-travel".to_string(),
+            name: "Cherry MX Brown (Full Travel)".to_string(),
             tag: "Tactile".to_string(),
-            description: "Hızlı tetiklenen hafif dokunsal tümsek ve temiz parlak clack".to_string(),
-            author: "sxmcaps Pack Hub".to_string(),
+            description: "Real Cherry MX Brown tactile press & release recordings with 5 randomized variations.".to_string(),
+            author: "Mechvibes Community".to_string(),
             device_type: "keyboard".to_string(),
-            size_kb: 92.9,
-            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/akko-cream-blue.zip".to_string(),
+            size_kb: 24.8,
+            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mxbrown-travel.zip".to_string(),
+        },
+        HubPackEntry {
+            id: "cream-travel".to_string(),
+            name: "NovelKeys Cream (Full Travel)".to_string(),
+            tag: "Linear".to_string(),
+            description: "Real NovelKeys Cream full-travel POM press & release recordings.".to_string(),
+            author: "Mechvibes Community".to_string(),
+            device_type: "keyboard".to_string(),
+            size_kb: 21.1,
+            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/cream-travel.zip".to_string(),
+        },
+        HubPackEntry {
+            id: "mouse-corsair-m65".to_string(),
+            name: "Corsair M65 Elite".to_string(),
+            tag: "Mouse".to_string(),
+            description: "Real Corsair M65 Elite Omron left, right, and scroll down/up recordings.".to_string(),
+            author: "Mechvibes++".to_string(),
+            device_type: "mouse".to_string(),
+            size_kb: 17.8,
+            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mouse-corsair-m65.zip".to_string(),
+        },
+        HubPackEntry {
+            id: "mouse-razer-mamba".to_string(),
+            name: "Razer Mamba Elite".to_string(),
+            tag: "Mouse".to_string(),
+            description: "Real Razer Mamba Elite mechanical mouse switch down/up recordings.".to_string(),
+            author: "Mechvibes++".to_string(),
+            device_type: "mouse".to_string(),
+            size_kb: 38.1,
+            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mouse-razer-mamba.zip".to_string(),
+        },
+        HubPackEntry {
+            id: "mouse-harpoon-rgb".to_string(),
+            name: "Corsair Harpoon RGB".to_string(),
+            tag: "Mouse".to_string(),
+            description: "Real Corsair Harpoon RGB gaming mouse click and scroll recordings.".to_string(),
+            author: "Mechvibes++".to_string(),
+            device_type: "mouse".to_string(),
+            size_kb: 36.0,
+            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mouse-harpoon-rgb.zip".to_string(),
+        },
+        HubPackEntry {
+            id: "mouse-logi-trackball".to_string(),
+            name: "Logitech M570 Trackball".to_string(),
+            tag: "Mouse".to_string(),
+            description: "Real Logitech M570 trackball soft tactile button click recordings.".to_string(),
+            author: "Mechvibes++".to_string(),
+            device_type: "mouse".to_string(),
+            size_kb: 23.4,
+            download_url: "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mouse-logi-trackball.zip".to_string(),
         },
     ]
 }
@@ -198,9 +238,9 @@ mod tests {
     }
 
     #[test]
-    fn embedded_hub_catalog_contains_four_packs() {
+    fn embedded_hub_catalog_contains_eight_real_packs() {
         let cat = embedded_fallback_catalog();
-        assert_eq!(cat.len(), 4);
+        assert_eq!(cat.len(), 8);
         assert!(cat.iter().all(|p| p.download_url.ends_with(".zip")));
     }
 }

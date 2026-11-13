@@ -1,0 +1,21 @@
+{
+  "id": "turquoise",
+  "name": "Turquoise Tealios",
+  "key_define_type": "multi",
+  "sound": "press/GENERIC_R{0-4}.mp3",
+  "soundup": "release/GENERIC.mp3",
+  "defines": {
+    "14": "press/BACKSPACE.mp3",
+    "14-up": "release/BACKSPACE.mp3",
+    "28": "press/ENTER.mp3",
+    "28-up": "release/ENTER.mp3",
+    "57": "press/SPACE.mp3",
+    "57-up": "release/SPACE.mp3"
+  },
+  "version": 2,
+  "tag": "Linear",
+  "description": "Real Tealios linear switch full-travel press & release recording.",
+  "device_type": "keyboard",
+  "author": "Mechvibes",
+  "accent": "#ffffff"
+}

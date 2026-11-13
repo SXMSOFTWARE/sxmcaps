@@ -1,45 +1,84 @@
 {
-  "version": 1,
   "packs": [
     {
-      "id": "gateron-milky-yellow",
-      "name": "Gateron Milky Yellow",
+      "id": "mxblack-travel",
+      "name": "Cherry MX Black (Full Travel)",
       "tag": "Linear",
-      "description": "Sütlü nylon gövdeli, pürüzsüz ve kremsi klasik lineer karakter",
-      "author": "sxmcaps Pack Hub",
+      "description": "Real Cherry MX Black full-travel key press & release microphone recordings.",
+      "author": "Mechvibes Community",
       "device_type": "keyboard",
-      "size_kb": 95.1,
-      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/gateron-milky-yellow.zip"
+      "size_kb": 20.1,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mxblack-travel.zip"
     },
     {
-      "id": "gazzew-boba-u4t",
-      "name": "Gazzew Boba U4T",
-      "tag": "Thocky",
-      "description": "Keskin uzun direkli D-tümsekli sert tactile ve derin tok thock",
-      "author": "sxmcaps Pack Hub",
+      "id": "mxblue-travel",
+      "name": "Cherry MX Blue (Full Travel)",
+      "tag": "Clicky",
+      "description": "Real Cherry MX Blue click-jacket press & release recordings with crisp Space/Enter.",
+      "author": "Mechvibes Community",
       "device_type": "keyboard",
-      "size_kb": 98.5,
-      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/gazzew-boba-u4t.zip"
+      "size_kb": 9.9,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mxblue-travel.zip"
     },
     {
-      "id": "novelkeys-cream",
-      "name": "NovelKeys Cream",
-      "tag": "Linear",
-      "description": "Tam POM gövde ile keskin, net ve karakteristik clack sesi",
-      "author": "sxmcaps Pack Hub",
-      "device_type": "keyboard",
-      "size_kb": 92.8,
-      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/novelkeys-cream.zip"
-    },
-    {
-      "id": "akko-cream-blue",
-      "name": "Akko V3 Cream Blue",
+      "id": "mxbrown-travel",
+      "name": "Cherry MX Brown (Full Travel)",
       "tag": "Tactile",
-      "description": "Hızlı tetiklenen hafif dokunsal tümsek ve temiz parlak clack",
-      "author": "sxmcaps Pack Hub",
+      "description": "Real Cherry MX Brown tactile press & release recordings with 5 randomized variations.",
+      "author": "Mechvibes Community",
       "device_type": "keyboard",
-      "size_kb": 92.9,
-      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/akko-cream-blue.zip"
+      "size_kb": 24.8,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mxbrown-travel.zip"
+    },
+    {
+      "id": "cream-travel",
+      "name": "NovelKeys Cream (Full Travel)",
+      "tag": "Linear",
+      "description": "Real NovelKeys Cream full-travel POM press & release recordings.",
+      "author": "Mechvibes Community",
+      "device_type": "keyboard",
+      "size_kb": 21.1,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/cream-travel.zip"
+    },
+    {
+      "id": "mouse-corsair-m65",
+      "name": "Corsair M65 Elite",
+      "tag": "Mouse",
+      "description": "Real Corsair M65 Elite Omron left, right, and scroll down/up recordings.",
+      "author": "Mechvibes++",
+      "device_type": "mouse",
+      "size_kb": 17.8,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mouse-corsair-m65.zip"
+    },
+    {
+      "id": "mouse-razer-mamba",
+      "name": "Razer Mamba Elite",
+      "tag": "Mouse",
+      "description": "Real Razer Mamba Elite mechanical mouse switch down/up recordings.",
+      "author": "Mechvibes++",
+      "device_type": "mouse",
+      "size_kb": 38.1,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mouse-razer-mamba.zip"
+    },
+    {
+      "id": "mouse-harpoon-rgb",
+      "name": "Corsair Harpoon RGB",
+      "tag": "Mouse",
+      "description": "Real Corsair Harpoon RGB gaming mouse click and scroll recordings.",
+      "author": "Mechvibes++",
+      "device_type": "mouse",
+      "size_kb": 36.0,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mouse-harpoon-rgb.zip"
+    },
+    {
+      "id": "mouse-logi-trackball",
+      "name": "Logitech M570 Trackball",
+      "tag": "Mouse",
+      "description": "Real Logitech M570 trackball soft tactile button click recordings.",
+      "author": "Mechvibes++",
+      "device_type": "mouse",
+      "size_kb": 23.4,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/mouse-logi-trackball.zip"
     }
   ]
 }

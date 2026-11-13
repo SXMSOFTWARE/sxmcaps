@@ -136,13 +136,44 @@ impl EngineState {
             .map(|g| g.clone())
             .unwrap_or_default();
         let packs = discover_soundpacks(&roots);
-        let cfg = self.settings.read().map(|g| g.clone()).unwrap_or_default();
+        let mut cfg = self.settings.read().map(|g| g.clone()).unwrap_or_default();
+        let mut cfg_changed = false;
+
+        // Migrate legacy v0.1/v0.2 synthetic pack IDs cleanly to real Mechvibes packs
+        let mapped_kb = match cfg.active_keyboard_pack.as_str() {
+            "holy-panda" => Some("holy-pandas"),
+            "cherry-mx-blue" => Some("cherrymx-blue-pbt"),
+            "cherry-mx-red" => Some("cherrymx-red-pbt"),
+            "cherry-mx-brown" => Some("cherrymx-brown-pbt"),
+            "cherry-mx-black" => Some("cherrymx-black-pbt"),
+            "gateron-oil-king" => Some("eg-oreo"),
+            "topre-45g" => Some("topre-purple-hybrid-pbt"),
+            "ibm-model-m" => Some("cherrymx-blue-abs"),
+            _ => None,
+        };
+        if let Some(m) = mapped_kb {
+            cfg.active_keyboard_pack = m.to_string();
+            cfg_changed = true;
+        }
+        let mapped_ms = match cfg.active_mouse_pack.as_str() {
+            "mouse-omron" => Some("mouse-logi-g502"),
+            "mouse-silent" => Some("mouse-chat"),
+            _ => None,
+        };
+        if let Some(m) = mapped_ms {
+            cfg.active_mouse_pack = m.to_string();
+            cfg_changed = true;
+        }
 
         if let Some(kb_info) = packs
             .iter()
             .find(|p| p.id == cfg.active_keyboard_pack && p.device_type != "mouse")
             .or_else(|| packs.iter().find(|p| p.device_type != "mouse"))
         {
+            if cfg.active_keyboard_pack != kb_info.id {
+                cfg.active_keyboard_pack = kb_info.id.clone();
+                cfg_changed = true;
+            }
             if let Ok(loaded) = load_soundpack(kb_info) {
                 if let Ok(mut g) = self.keyboard_pack.write() {
                     *g = Some(Arc::new(loaded));
@@ -155,10 +186,21 @@ impl EngineState {
             .find(|p| p.id == cfg.active_mouse_pack && p.device_type == "mouse")
             .or_else(|| packs.iter().find(|p| p.device_type == "mouse"))
         {
+            if cfg.active_mouse_pack != ms_info.id {
+                cfg.active_mouse_pack = ms_info.id.clone();
+                cfg_changed = true;
+            }
             if let Ok(loaded) = load_soundpack(ms_info) {
                 if let Ok(mut g) = self.mouse_pack.write() {
                     *g = Some(Arc::new(loaded));
                 }
+            }
+        }
+
+        if cfg_changed {
+            let _ = save_settings(&cfg);
+            if let Ok(mut g) = self.settings.write() {
+                *g = cfg;
             }
         }
     }
@@ -447,11 +489,11 @@ fn delete_soundpack(
     let mut cfg = state.settings.read().map(|g| g.clone()).unwrap_or_default();
     let mut changed = false;
     if cfg.active_keyboard_pack == pack_id {
-        cfg.active_keyboard_pack = "holy-panda".to_string();
+        cfg.active_keyboard_pack = "cherrymx-brown-pbt".to_string();
         changed = true;
     }
     if cfg.active_mouse_pack == pack_id {
-        cfg.active_mouse_pack = "mouse-omron".to_string();
+        cfg.active_mouse_pack = "mouse-logi-g502".to_string();
         changed = true;
     }
     if changed {

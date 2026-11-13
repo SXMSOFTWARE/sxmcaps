@@ -7,6 +7,7 @@ import {
   SoundpackInfo,
   UpdateCheckResult,
 } from '../types';
+import { detectSystemLanguage, useI18n } from '../i18n';
 import {
   AppWindow,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   FolderOpen,
   FolderUp,
   HardDrive,
+  Languages,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -51,13 +53,15 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
   onOpenFolder,
   onCheckUpdate,
 }) => {
+  const { t } = useI18n();
+  const detectedSys = detectSystemLanguage();
   const [busy, setBusy] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [rulePattern, setRulePattern] = useState('');
   const [ruleName, setRuleName] = useState('');
   const [rulePackId, setRulePackId] = useState(
-    settings.active_keyboard_pack || 'holy-panda'
+    settings.active_keyboard_pack || 'cherrymx-brown-pbt'
   );
   const [ruleMute, setRuleMute] = useState(false);
 
@@ -111,7 +115,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
         <div className="flex items-center justify-between border-b border-white/[0.07] pb-2.5">
           <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
             <AppWindow className="h-3.5 w-3.5 text-white" />
-            Uygulamaya Göre Profiller
+            {t.system.profilesTitle}
           </div>
 
           <button
@@ -140,9 +144,11 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
 
         <div className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-[#060608] px-3 py-2 text-[11px]">
           <span className="truncate text-zinc-400">
-            Aktif Pencere:{' '}
+            {t.system.activeWindow}:{' '}
             <strong className="font-mono text-white">
-              {activeWindow?.app_class || activeWindow?.title || 'Algılanıyor...'}
+              {activeWindow?.app_class ||
+                activeWindow?.title ||
+                t.system.detecting}
             </strong>
           </span>
           {activeWindow?.app_class && (
@@ -154,7 +160,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               }}
               className="shrink-0 cursor-pointer rounded border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] text-white hover:bg-white hover:text-black"
             >
-              Kurala Al
+              {t.system.useWindow}
             </button>
           )}
         </div>
@@ -166,7 +172,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               type="text"
               value={rulePattern}
               onChange={(e) => setRulePattern(e.target.value)}
-              placeholder="Uygulama / Başlık (örn. code, cs2)"
+              placeholder={t.system.patternPlaceholder}
               className="rounded-lg border border-white/15 bg-[#121216] px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-white"
             />
             <select
@@ -181,7 +187,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               }}
               className="cursor-pointer rounded-lg border border-white/15 bg-[#121216] px-2.5 py-1.5 text-xs text-white outline-none focus:border-white"
             >
-              <option value="__MUTE__">Otomatik Sustur (Sessiz)</option>
+              <option value="__MUTE__">{t.system.autoMute}</option>
               {keyboardPacks.map((p) => (
                 <option key={p.id} value={p.id}>
                   Switch: {p.name}
@@ -196,7 +202,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
             className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-zinc-200 disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
-            Profil Kuralı Ekle
+            {t.system.addRule}
           </button>
         </div>
 
@@ -204,7 +210,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
         <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
           {settings.app_profiles.length === 0 ? (
             <div className="py-5 text-center text-[11px] text-zinc-500">
-              Henüz profil kuralı yok. Örneğin oyunlarda otomatik susturabilir veya editörde farklı switch seçebilirsiniz.
+              {t.system.noRules}
             </div>
           ) : (
             settings.app_profiles.map((rule) => (
@@ -218,10 +224,10 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                   </div>
                   <div className="text-[10px] text-zinc-400">
                     {rule.mute
-                      ? 'Otomatik Sustur'
+                      ? t.system.autoMute
                       : `Switch: ${
-                          keyboardPacks.find((p) => p.id === rule.pack_id)?.name ??
-                          rule.pack_id
+                          keyboardPacks.find((p) => p.id === rule.pack_id)
+                            ?.name ?? rule.pack_id
                         }`}
                   </div>
                 </div>
@@ -243,7 +249,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                         : 'border-white/20 text-zinc-400'
                     }`}
                   >
-                    {rule.enabled ? 'Aktif' : 'Pasif'}
+                    {rule.enabled ? t.system.active : t.system.paused}
                   </button>
                   <button
                     type="button"
@@ -266,14 +272,14 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
         </div>
       </div>
 
-      {/* Right: Hardware Permissions, Autostart, Import & Updater */}
+      {/* Right: Hardware Permissions, Language, Autostart, Import & Updater */}
       <div className="flex flex-col gap-3 lg:col-span-6">
-        {/* Global Input & Autostart */}
+        {/* Global Input, Language & Autostart */}
         <div className="flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#0b0b0e] p-4">
           <div className="flex items-center justify-between border-b border-white/[0.07] pb-2">
             <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
               <Cpu className="h-3.5 w-3.5 text-white" />
-              Donanım, Otomatik Başlatma & Tepsi
+              {t.system.hwTitle}
             </div>
             <button
               type="button"
@@ -281,7 +287,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               className="inline-flex cursor-pointer items-center gap-1 rounded border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-200 hover:bg-white/10"
             >
               <RefreshCw className="h-3 w-3" />
-              Yenile
+              {t.system.refresh}
             </button>
           </div>
 
@@ -290,8 +296,8 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               <div>
                 <div className="text-xs font-semibold text-white">
                   {isGlobalActive
-                    ? `Aktif — ${inputStatus.active_devices.length} cihaz dinleniyor`
-                    : 'Global Dinleme İzni Bekleniyor'}
+                    ? t.system.globalListening(inputStatus.active_devices.length)
+                    : t.system.waitingPerm}
                 </div>
                 <div className="text-[10px] text-zinc-500">
                   {inputStatus.desktop || 'OS'} ({inputStatus.session_type})
@@ -300,7 +306,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               {isGlobalActive ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-0.5 text-[10px] font-bold text-black">
                   <CheckCircle2 className="h-3 w-3" />
-                  BAĞLI
+                  {t.system.connected}
                 </span>
               ) : (
                 <button
@@ -310,7 +316,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                   className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-black hover:bg-zinc-200 disabled:opacity-50"
                 >
                   <ShieldCheck className="h-3.5 w-3.5" />
-                  {busy ? 'Uygulanıyor...' : 'İzin Ver'}
+                  {busy ? t.system.applying : t.system.grantPerm}
                 </button>
               )}
             </div>
@@ -329,13 +335,52 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
             )}
           </div>
 
+          {/* Language Selector (Auto / TR / EN) */}
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-[#060608] p-2.5">
+            <div className="flex items-center gap-2">
+              <Languages className="h-4 w-4 text-zinc-300" />
+              <span className="text-[11px] font-medium text-white">
+                {t.system.language}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-[#111115] p-0.5">
+              {(
+                [
+                  { id: 'auto', label: t.system.langAuto(detectedSys) },
+                  { id: 'tr', label: 'Türkçe' },
+                  { id: 'en', label: 'English' },
+                ] as const
+              ).map((opt) => {
+                const active = (settings.language || 'auto') === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() =>
+                      onUpdateSettings({ ...settings, language: opt.id })
+                    }
+                    className={`cursor-pointer rounded-md px-2 py-1 text-[10px] font-semibold transition ${
+                      active
+                        ? 'bg-white text-black'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="flex items-center justify-between rounded-xl border border-white/[0.08] bg-[#060608] p-2.5">
               <div>
                 <div className="text-[11px] font-medium text-white">
-                  Sistemle Başlat
+                  {t.system.autostart}
                 </div>
-                <div className="text-[10px] text-zinc-500">Autostart</div>
+                <div className="text-[10px] text-zinc-500">
+                  {t.system.autostartDesc}
+                </div>
               </div>
               <button
                 type="button"
@@ -364,9 +409,11 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
             <div className="flex items-center justify-between rounded-xl border border-white/[0.08] bg-[#060608] p-2.5">
               <div>
                 <div className="text-[11px] font-medium text-white">
-                  Tepsiye Küçült
+                  {t.system.tray}
                 </div>
-                <div className="text-[10px] text-zinc-500">Kapatınca gizle</div>
+                <div className="text-[10px] text-zinc-500">
+                  {t.system.trayDesc}
+                </div>
               </div>
               <button
                 type="button"
@@ -399,7 +446,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
           <div className="flex items-center justify-between border-b border-white/[0.07] pb-2">
             <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
               <HardDrive className="h-3.5 w-3.5 text-white" />
-              Mechvibes İçe Aktar & Sürüm ({appVersion})
+              {t.system.importerTitle} ({appVersion})
             </div>
 
             <button
@@ -408,7 +455,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               onClick={handleCheckUpdate}
               className="cursor-pointer rounded border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-200 hover:bg-white hover:text-black disabled:opacity-50"
             >
-              {checkingUpdate ? 'Kontrol...' : 'Güncelleme Kontrol Et'}
+              {checkingUpdate ? t.system.checking : t.system.checkUpdate}
             </button>
           </div>
 
@@ -417,7 +464,8 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               {updateInfo.has_update ? (
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-white">
-                    Yeni sürüm mevcut: <strong>{updateInfo.latest_version}</strong>
+                    {t.system.newVersion}{' '}
+                    <strong>{updateInfo.latest_version}</strong>
                   </span>
                   <a
                     href={updateInfo.release_url}
@@ -425,13 +473,15 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
                     rel="noreferrer"
                     className="rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-black"
                   >
-                    İndir
+                    {t.system.download}
                   </a>
                 </div>
               ) : (
                 <span className="text-zinc-400">
-                  Güncelsiniz ({updateInfo.current_version} • Son sürüm:{' '}
-                  {updateInfo.latest_version})
+                  {t.system.upToDate(
+                    updateInfo.current_version,
+                    updateInfo.latest_version
+                  )}
                 </span>
               )}
             </div>
@@ -444,7 +494,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-white px-2.5 py-2 text-xs font-semibold text-black transition hover:bg-zinc-200"
             >
               <Plus className="h-3.5 w-3.5" />
-              ZIP Ekle
+              {t.system.addZip}
             </button>
             <button
               type="button"
@@ -452,7 +502,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-[#121216] px-2.5 py-2 text-xs font-semibold text-white transition hover:border-white hover:bg-white/10"
             >
               <FolderUp className="h-3.5 w-3.5" />
-              Klasör
+              {t.system.folder}
             </button>
             <button
               type="button"
@@ -461,7 +511,7 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-[#060608] px-2.5 py-2 text-xs text-zinc-200 transition hover:border-white"
             >
               <FolderOpen className="h-3.5 w-3.5" />
-              Dizin
+              {t.system.openDir}
             </button>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { KEYBOARD_ROWS } from '../keymap';
 import { StatsData } from '../types';
+import { useI18n } from '../i18n';
 import { BarChart3, Flame, Mouse, RotateCcw, Trophy } from 'lucide-react';
 
 interface StatsSectionProps {
@@ -12,6 +13,8 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
   stats,
   onResetStats,
 }) => {
+  const { t } = useI18n();
+
   const maxKeyCount = useMemo(() => {
     const vals = Object.values(stats.heatmap);
     return vals.length > 0 ? Math.max(...vals, 1) : 1;
@@ -35,37 +38,38 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <div className="rounded-xl border border-white/10 bg-[#0b0b0e] p-3">
           <div className="text-[10px] font-medium tracking-wider text-zinc-500 uppercase">
-            Toplam Tuş Vuruşu
+            {t.stats.totalKeys}
           </div>
           <div className="mt-1 font-mono text-xl font-bold text-white">
-            {stats.total_keystrokes.toLocaleString('tr-TR')}
+            {stats.total_keystrokes.toLocaleString(t.locale)}
           </div>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-[#0b0b0e] p-3">
           <div className="flex items-center gap-1 text-[10px] font-medium tracking-wider text-zinc-500 uppercase">
             <Mouse className="h-3 w-3" />
-            Fare Tıklaması
+            {t.stats.mouseClicks}
           </div>
           <div className="mt-1 font-mono text-xl font-bold text-white">
-            {stats.total_mouse_clicks.toLocaleString('tr-TR')}
+            {stats.total_mouse_clicks.toLocaleString(t.locale)}
           </div>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-[#0b0b0e] p-3">
           <div className="flex items-center gap-1 text-[10px] font-medium tracking-wider text-zinc-500 uppercase">
             <Trophy className="h-3 w-3" />
-            Rekor Hız
+            {t.stats.peakSpeed}
           </div>
           <div className="mt-1 font-mono text-xl font-bold text-white">
-            {stats.peak_wpm} <span className="text-xs font-normal text-zinc-400">WPM</span>
+            {stats.peak_wpm}{' '}
+            <span className="text-xs font-normal text-zinc-400">WPM</span>
           </div>
         </div>
 
         <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#0b0b0e] p-3">
           <div>
             <div className="text-[10px] font-medium tracking-wider text-zinc-500 uppercase">
-              En Aktif Tuş
+              {t.stats.topKey}
             </div>
             <div className="mt-1 font-mono text-base font-bold text-white">
               {topKeys[0]?.[0] ?? '—'}
@@ -75,11 +79,11 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
           <button
             type="button"
             onClick={onResetStats}
-            title="İstatistikleri sıfırla"
+            title={t.stats.resetTitle}
             className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-white/15 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-zinc-300 hover:border-white hover:bg-white hover:text-black"
           >
             <RotateCcw className="h-3 w-3" />
-            Sıfırla
+            {t.stats.resetBtn}
           </button>
         </div>
       </div>
@@ -89,14 +93,14 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
         <div className="mb-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
             <Flame className="h-3.5 w-3.5 text-white" />
-            Tuş Kullanım Isı Haritası
+            {t.stats.heatmapTitle}
           </div>
           <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
-            <span>Az</span>
-            <span className="h-2.5 w-4 rounded-xs bg-[#18181d] border border-white/10" />
+            <span>{t.stats.less}</span>
+            <span className="h-2.5 w-4 rounded-xs border border-white/10 bg-[#18181d]" />
             <span className="h-2.5 w-4 rounded-xs bg-zinc-500" />
             <span className="h-2.5 w-4 rounded-xs bg-white" />
-            <span>Çok</span>
+            <span>{t.stats.more}</span>
           </div>
         </div>
 
@@ -109,7 +113,6 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
                   const ratio = hits / maxKeyCount;
                   const flexGrow = key.width ?? 1;
 
-                  // Pure monochrome interpolation: dark graphite -> bright white
                   const bg =
                     hits === 0
                       ? '#141418'
@@ -125,7 +128,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
                   return (
                     <div
                       key={key.code}
-                      title={`${key.code}: ${hits.toLocaleString('tr-TR')} vuruş`}
+                      title={`${key.code}: ${hits.toLocaleString(t.locale)} ${t.stats.hits}`}
                       style={{
                         flex: `${flexGrow} 1 0%`,
                         backgroundColor: bg,
@@ -150,11 +153,11 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
         <div className="rounded-2xl border border-white/10 bg-[#0b0b0e] p-3.5">
           <div className="mb-2.5 flex items-center gap-2 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
             <BarChart3 className="h-3.5 w-3.5 text-white" />
-            En Çok Basılan Tuşlar
+            {t.stats.mostPressed}
           </div>
           {topKeys.length === 0 ? (
             <div className="py-6 text-center text-xs text-zinc-500">
-              Henüz tuş vuruşu kaydedilmedi.
+              {t.stats.noKeysYet}
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -183,11 +186,11 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
 
         <div className="rounded-2xl border border-white/10 bg-[#0b0b0e] p-3.5">
           <div className="mb-2.5 text-xs font-semibold tracking-wider text-zinc-300 uppercase">
-            Günlük Aktivite (Son 14 Gün)
+            {t.stats.dailyTitle}
           </div>
           {dailySeries.entries.length === 0 ? (
             <div className="py-6 text-center text-xs text-zinc-500">
-              Günlük veri biriktikçe burada görüntülenecek.
+              {t.stats.dailyEmpty}
             </div>
           ) : (
             <div className="flex h-28 items-end gap-1.5 pt-2">
@@ -196,7 +199,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
                 return (
                   <div
                     key={date}
-                    title={`${date}: ${count.toLocaleString('tr-TR')} vuruş`}
+                    title={`${date}: ${count.toLocaleString(t.locale)} ${t.stats.hits}`}
                     className="flex flex-1 flex-col items-center gap-1"
                   >
                     <div className="flex h-20 w-full items-end">

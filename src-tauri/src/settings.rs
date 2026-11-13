@@ -39,13 +39,15 @@ pub struct AppSettings {
     pub profiles_enabled: bool,
     pub app_profiles: Vec<AppProfileRule>,
     pub autostart: bool,
+    // v0.2.1 Localization ("auto" | "tr" | "en")
+    pub language: String,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            active_keyboard_pack: "holy-panda".to_string(),
-            active_mouse_pack: "mouse-omron".to_string(),
+            active_keyboard_pack: "cherrymx-brown-pbt".to_string(),
+            active_mouse_pack: "mouse-logi-g502".to_string(),
             enabled: true,
             keyboard_volume: 0.85,
             mouse_enabled: true,
@@ -66,6 +68,7 @@ impl Default for AppSettings {
             profiles_enabled: false,
             app_profiles: Vec::new(),
             autostart: false,
+            language: "auto".to_string(),
         }
     }
 }

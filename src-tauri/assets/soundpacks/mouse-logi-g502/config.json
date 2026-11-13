@@ -1,0 +1,32 @@
+{
+  "config_version": "2",
+  "id": "mouse-logi-g502",
+  "name": "Logitech G502 Lightspeed",
+  "tag": "Gaming",
+  "author": "Mechvibes++",
+  "description": "Real Logitech G502 Lightspeed Omron switch left, right, and scroll down/up recording.",
+  "accent": "#ffffff",
+  "device_type": "mouse",
+  "definitions": {
+    "MouseLeft": {
+      "down": "left-down.ogg",
+      "up": "left-up.ogg"
+    },
+    "MouseRight": {
+      "down": "right-down.ogg",
+      "up": "right-up.ogg"
+    },
+    "MouseMiddle": {
+      "down": "scroll-down.ogg",
+      "up": "scroll-up.ogg"
+    },
+    "MouseSide": {
+      "down": "right-down.ogg",
+      "up": "right-up.ogg"
+    },
+    "MouseExtra": {
+      "down": "right-down.ogg",
+      "up": "right-up.ogg"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { AppSettings, SoundpackInfo } from '../types';
-import { Check, Mouse, Play, Volume2 } from 'lucide-react';
+import { useI18n } from '../i18n';
+import { Check, Download, Mouse, Play, Trash2, Volume2 } from 'lucide-react';
 
 interface MouseSectionProps {
   settings: AppSettings;
@@ -9,6 +10,8 @@ interface MouseSectionProps {
   onUpdateSettings: (next: AppSettings) => void;
   onSelectMousePack: (id: string) => void;
   onTestMouseButton: (button: string, isDown: boolean) => void;
+  onDeleteCustom: (id: string) => void;
+  onExportZip: (id: string) => void;
 }
 
 export const MouseSection: React.FC<MouseSectionProps> = ({
@@ -18,7 +21,10 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
   onUpdateSettings,
   onSelectMousePack,
   onTestMouseButton,
+  onDeleteCustom,
+  onExportZip,
 }) => {
+  const { t } = useI18n();
   const mousePacks = soundpacks.filter((p) => p.device_type === 'mouse');
 
   const leftDown = pressedMouseButtons.has('MouseLeft');
@@ -37,10 +43,10 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
             <Mouse className="h-4 w-4 text-white" />
             <div>
               <div className="text-xs font-semibold text-white">
-                Fare Tıklama Sesleri
+                {t.mouse.title}
               </div>
               <div className="text-[11px] text-zinc-500">
-                Sol, sağ, orta ve yan tuş tıklamaları
+                {t.mouse.subtitle}
               </div>
             </div>
           </div>
@@ -87,7 +93,7 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
                     : 'bg-[#17171c] text-zinc-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                SOL
+                {t.mouse.left}
               </button>
               <button
                 type="button"
@@ -102,7 +108,7 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
                     : 'bg-[#17171c] text-zinc-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                SAĞ
+                {t.mouse.right}
               </button>
             </div>
 
@@ -114,7 +120,7 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
               onMouseLeave={() =>
                 midDown && onTestMouseButton('MouseMiddle', false)
               }
-              title="Orta Tık Testi"
+              title={t.mouse.midTitle}
               className={`absolute top-7 left-1/2 h-9 w-4 -translate-x-1/2 cursor-pointer rounded-full border transition ${
                 midDown
                   ? 'border-black bg-white shadow-[0_0_12px_rgba(255,255,255,0.8)]'
@@ -127,7 +133,7 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
               type="button"
               onMouseDown={() => onTestMouseButton('MouseSide', true)}
               onMouseUp={() => onTestMouseButton('MouseSide', false)}
-              title="Yan Tuş Testi"
+              title={t.mouse.sideTitle}
               className={`absolute top-24 -left-0.5 h-8 w-2 cursor-pointer rounded-r border border-l-0 transition ${
                 sideDown
                   ? 'border-white bg-white'
@@ -144,7 +150,7 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
           </div>
 
           <p className="mt-2.5 text-[11px] text-zinc-500">
-            Test etmek için yukarıdaki fare tuşlarına tıklayın
+            {t.mouse.testHint}
           </p>
         </div>
 
@@ -153,7 +159,7 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="flex items-center gap-1.5 font-medium text-zinc-200">
               <Volume2 className="h-3.5 w-3.5 text-white" />
-              Fare Ses Seviyesi
+              {t.mouse.volume}
             </span>
             <span className="font-mono text-xs text-white">
               {Math.round(settings.mouse_volume * 100)}%
@@ -179,10 +185,10 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
       {/* Right: Mouse Soundpacks */}
       <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0b0b0e] p-4 lg:col-span-7">
         <div className="text-xs font-semibold tracking-wider text-zinc-300 uppercase">
-          Fare Mikro Anahtar Paketleri
+          {t.mouse.packsTitle} ({mousePacks.length})
         </div>
 
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-2">
           {mousePacks.map((pack) => {
             const isActive = pack.id === settings.active_mouse_pack;
             return (
@@ -226,22 +232,58 @@ export const MouseSection: React.FC<MouseSectionProps> = ({
                   </p>
                 </div>
 
-                <div className="mt-3 flex items-center justify-end border-t border-white/[0.06] pt-2.5">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectMousePack(pack.id);
-                      setTimeout(() => {
-                        onTestMouseButton('MouseLeft', true);
-                        setTimeout(() => onTestMouseButton('MouseLeft', false), 65);
-                      }, 40);
-                    }}
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white hover:border-white hover:bg-white hover:text-black"
-                  >
-                    <Play className="h-3 w-3 fill-current" />
-                    Tıkla & Test Et
-                  </button>
+                <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-2.5">
+                  <span className="text-[10px] text-zinc-500">
+                    {pack.is_builtin ? t.packs.builtin : t.mouse.installed}
+                  </span>
+
+                  <div className="flex items-center gap-1">
+                    {!pack.is_builtin && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onExportZip(pack.id);
+                          }}
+                          title={t.packs.exportZipTitle}
+                          className="cursor-pointer rounded p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteCustom(pack.id);
+                          }}
+                          title={t.packs.deleteTitle}
+                          className="cursor-pointer rounded p-1 text-zinc-500 transition hover:bg-white/10 hover:text-white"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectMousePack(pack.id);
+                        setTimeout(() => {
+                          onTestMouseButton('MouseLeft', true);
+                          setTimeout(
+                            () => onTestMouseButton('MouseLeft', false),
+                            65
+                          );
+                        }, 40);
+                      }}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white hover:border-white hover:bg-white hover:text-black"
+                    >
+                      <Play className="h-3 w-3 fill-current" />
+                      {t.mouse.clickTest}
+                    </button>
+                  </div>
                 </div>
               </div>
             );

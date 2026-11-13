@@ -1,0 +1,32 @@
+{
+  "config_version": "2",
+  "id": "mouse-apple-magic",
+  "name": "Apple Magic Mouse",
+  "tag": "Minimal",
+  "author": "Mechvibes++",
+  "description": "Real Apple Magic Mouse crisp click & release recording.",
+  "accent": "#ffffff",
+  "device_type": "mouse",
+  "definitions": {
+    "MouseLeft": {
+      "down": "left-down.mp3",
+      "up": "left-up.mp3"
+    },
+    "MouseRight": {
+      "down": "right-down.mp3",
+      "up": "right-up.mp3"
+    },
+    "MouseMiddle": {
+      "down": "scroll-down.mp3",
+      "up": "scroll-up.mp3"
+    },
+    "MouseSide": {
+      "down": "right-down.mp3",
+      "up": "right-up.mp3"
+    },
+    "MouseExtra": {
+      "down": "right-down.mp3",
+      "up": "right-up.mp3"
+    }
+  }
+}

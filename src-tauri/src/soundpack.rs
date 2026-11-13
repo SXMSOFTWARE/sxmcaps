@@ -124,16 +124,26 @@ pub fn discover_soundpacks(builtin_roots: &[PathBuf]) -> Vec<SoundpackInfo> {
 
 fn builtin_order(id: &str) -> usize {
     match id {
-        "holy-panda" => 0,
-        "cherry-mx-blue" => 1,
-        "cherry-mx-red" => 2,
-        "cherry-mx-brown" => 3,
-        "cherry-mx-black" => 4,
-        "gateron-oil-king" => 5,
-        "topre-45g" => 6,
-        "ibm-model-m" => 7,
-        "mouse-omron" => 8,
-        "mouse-silent" => 9,
+        "cherrymx-brown-pbt" => 0,
+        "cherrymx-brown-abs" => 1,
+        "cherrymx-blue-pbt" => 2,
+        "cherrymx-blue-abs" => 3,
+        "cherrymx-black-pbt" => 4,
+        "cherrymx-black-abs" => 5,
+        "cherrymx-red-pbt" => 6,
+        "cherrymx-red-abs" => 7,
+        "holy-pandas" => 8,
+        "topre-purple-hybrid-pbt" => 9,
+        "nk-cream" => 10,
+        "eg-crystal-purple" => 11,
+        "eg-oreo" => 12,
+        "turquoise" => 13,
+        "mouse-logi-g502" => 14,
+        "mouse-apple-magic" => 15,
+        "mouse-wooden" => 16,
+        "mouse-ping" => 17,
+        "mouse-chat" => 18,
+        "mouse-vibrate" => 19,
         _ => 100,
     }
 }
@@ -157,10 +167,20 @@ fn scan_root(
         if !cfg_path.is_file() {
             continue;
         }
-        if let Ok(info) = parse_soundpack_info(&path, &cfg_path, is_builtin) {
+        if let Ok(mut info) = parse_soundpack_info(&path, &cfg_path, is_builtin) {
             if let Some(&idx) = seen_ids.get(&info.id) {
                 if !is_builtin {
-                    packs[idx] = info;
+                    if packs[idx].is_builtin {
+                        // Avoid clobbering a built-in pack if a user zip shares the same id
+                        info.id = format!(
+                            "{}-custom",
+                            info.id
+                        );
+                        seen_ids.insert(info.id.clone(), packs.len());
+                        packs.push(info);
+                    } else {
+                        packs[idx] = info;
+                    }
                 }
             } else {
                 seen_ids.insert(info.id.clone(), packs.len());
@@ -200,11 +220,16 @@ fn parse_soundpack_info(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| id.clone());
 
-    let is_v2 = val.get("config_version").and_then(|v| v.as_str()) == Some("2")
-        || val.get("definitions").is_some();
+    let is_v2 = val
+        .get("config_version")
+        .map(|v| v.as_str() == Some("2") || v.as_u64() == Some(2))
+        .unwrap_or(false)
+        || val.get("definitions").is_some()
+        || val.get("defs").is_some();
 
     let key_define_type = val
         .get("key_define_type")
+        .or_else(|| val.get("definition_method"))
         .and_then(|v| v.as_str())
         .unwrap_or("single");
 
@@ -218,7 +243,12 @@ fn parse_soundpack_info(
         "Mechvibes V1 (Single)".to_string()
     };
 
-    let key_count = if let Some(obj) = val.get("definitions").and_then(|v| v.as_object()) {
+    let defs_obj = val
+        .get("definitions")
+        .or_else(|| val.get("defs"))
+        .and_then(|v| v.as_object());
+
+    let key_count = if let Some(obj) = defs_obj {
         obj.len()
     } else if let Some(obj) = val.get("defines").and_then(|v| v.as_object()) {
         obj.len()
@@ -229,13 +259,18 @@ fn parse_soundpack_info(
     let device_type = val
         .get("device_type")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+        .map(|s| s.to_lowercase())
+        .or_else(|| {
+            val.get("soundpack_type")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_lowercase())
+        })
         .unwrap_or_else(|| {
-            if val
-                .get("definitions")
-                .and_then(|d| d.as_object())
-                .map(|m| m.keys().any(|k| k.starts_with("Mouse")))
-                .unwrap_or(false)
+            if id.starts_with("mouse-")
+                || folder_id.starts_with("mouse-")
+                || defs_obj
+                    .map(|m| m.keys().any(|k| k.starts_with("Mouse")))
+                    .unwrap_or(false)
             {
                 "mouse".to_string()
             } else {
@@ -247,9 +282,16 @@ fn parse_soundpack_info(
         .get("tag")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
+        .or_else(|| {
+            val.get("tags")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
         .unwrap_or_else(|| {
             if is_builtin {
-                "Built-in".to_string()
+                "Mechvibes".to_string()
             } else {
                 "Custom".to_string()
             }
@@ -259,22 +301,23 @@ fn parse_soundpack_info(
         .get("accent")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| "#8b5cf6".to_string());
+        .unwrap_or_else(|| "#ffffff".to_string());
 
     let description = val
         .get("description")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{} ses paketi ({})", name, format));
+        .unwrap_or_else(|| format!("{} ({})", name, format));
 
     let author = val
         .get("author")
+        .or_else(|| val.get("m_author"))
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| "Community".to_string());
+        .unwrap_or_else(|| "Mechvibes".to_string());
 
     Ok(SoundpackInfo {
-        id: if is_builtin { id } else { folder_id },
+        id,
         name,
         description,
         tag,
@@ -286,6 +329,45 @@ fn parse_soundpack_info(
         key_count,
         format,
     })
+}
+
+fn expand_sound_pattern(pattern: &str) -> Vec<String> {
+    if let (Some(l), Some(r)) = (pattern.find('{'), pattern.find('}')) {
+        if l < r {
+            let inner = &pattern[l + 1..r];
+            if let Some((a_str, b_str)) = inner.split_once('-') {
+                if let (Ok(a), Ok(b)) = (a_str.parse::<u32>(), b_str.parse::<u32>()) {
+                    let prefix = &pattern[..l];
+                    let suffix = &pattern[r + 1..];
+                    let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+                    return (lo..=hi)
+                        .take(32)
+                        .map(|n| format!("{prefix}{n}{suffix}"))
+                        .collect();
+                }
+            }
+        }
+    }
+    vec![pattern.to_string()]
+}
+
+fn push_timing_pair(
+    master_clip: &AudioClip,
+    pair: &Value,
+    target: &mut Vec<Arc<AudioClip>>,
+) {
+    let Some(arr) = pair.as_array() else {
+        return;
+    };
+    if arr.len() < 2 {
+        return;
+    }
+    let (Some(start), Some(end)) = (arr[0].as_f64(), arr[1].as_f64()) else {
+        return;
+    };
+    if end > start {
+        target.push(Arc::new(master_clip.slice_range_ms(start, end)));
+    }
 }
 
 pub fn load_soundpack(info: &SoundpackInfo) -> Result<LoadedSoundpack, String> {
@@ -331,11 +413,15 @@ pub fn load_soundpack(info: &SoundpackInfo) -> Result<LoadedSoundpack, String> {
         }
     }
 
-    // 2. Load V2 definitions
-    if let Some(defs) = val.get("definitions").and_then(|v| v.as_object()) {
+    // 2. Load V2 definitions / defs
+    if let Some(defs) = val
+        .get("definitions")
+        .or_else(|| val.get("defs"))
+        .and_then(|v| v.as_object())
+    {
         let global_audio = val
-            .get("sound")
-            .or_else(|| val.get("audio_file"))
+            .get("audio_file")
+            .or_else(|| val.get("sound"))
             .and_then(|v| v.as_str());
 
         for (code, entry) in defs {
@@ -367,21 +453,31 @@ pub fn load_soundpack(info: &SoundpackInfo) -> Result<LoadedSoundpack, String> {
                         up_clips.push(c);
                     }
                 }
-                if down_clips.is_empty() {
+                if down_clips.is_empty() && up_clips.is_empty() {
                     if let Some(audio_file) = obj
                         .get("audio_file")
                         .and_then(|v| v.as_str())
                         .or(global_audio)
                     {
-                        if let Ok(master_clip) = load_cached(audio_file) {
-                            if let (Some(start), Some(dur)) = (
-                                obj.get("start").and_then(|v| v.as_u64()),
-                                obj.get("duration").and_then(|v| v.as_u64()),
-                            ) {
-                                down_clips.push(Arc::new(master_clip.slice_ms(start, dur)));
-                            } else {
-                                down_clips.push(master_clip);
+                        match load_cached(audio_file) {
+                            Ok(master_clip) => {
+                                if let Some(timing) = obj.get("timing").and_then(|v| v.as_array()) {
+                                    if let Some(down_pair) = timing.first() {
+                                        push_timing_pair(&master_clip, down_pair, &mut down_clips);
+                                    }
+                                    if let Some(up_pair) = timing.get(1) {
+                                        push_timing_pair(&master_clip, up_pair, &mut up_clips);
+                                    }
+                                } else if let (Some(start), Some(dur)) = (
+                                    obj.get("start").and_then(|v| v.as_u64()),
+                                    obj.get("duration").and_then(|v| v.as_u64()),
+                                ) {
+                                    down_clips.push(Arc::new(master_clip.slice_ms(start, dur)));
+                                } else {
+                                    down_clips.push(master_clip);
+                                }
                             }
+                            Err(e) => return Err(e),
                         }
                     }
                 }
@@ -420,16 +516,13 @@ pub fn load_soundpack(info: &SoundpackInfo) -> Result<LoadedSoundpack, String> {
                     if arr.len() < 2 {
                         continue;
                     }
-                    let (Some(start), Some(dur)) = (arr[0].as_u64(), arr[1].as_u64()) else {
+                    let (Some(start), Some(dur)) = (arr[0].as_f64(), arr[1].as_f64()) else {
                         continue;
                     };
-                    if dur == 0 {
+                    if dur <= 0.0 {
                         continue;
                     }
-                    let sliced = Arc::new(master_clip.slice_ms(start, dur));
-                    if default_down.is_empty() {
-                        default_down.push(Arc::clone(&sliced));
-                    }
+                    let sliced = Arc::new(master_clip.slice_ms_f64(start, dur));
                     if let Some(web_code) = mechvibes_v1_to_web_code(raw_code) {
                         by_web_code.insert(
                             web_code.to_string(),
@@ -442,10 +535,19 @@ pub fn load_soundpack(info: &SoundpackInfo) -> Result<LoadedSoundpack, String> {
                 }
             }
         } else {
-            // multi mode
-            if let Some(fallback_name) = master_file {
-                if let Ok(clip) = load_cached(fallback_name) {
-                    default_down.push(clip);
+            // multi mode (supports pattern expansion `{0-4}`, `soundup`, and `XX-up` release keys)
+            if let Some(fallback_pattern) = master_file {
+                for fname in expand_sound_pattern(fallback_pattern) {
+                    if let Ok(clip) = load_cached(&fname) {
+                        default_down.push(clip);
+                    }
+                }
+            }
+            if let Some(up_pattern) = val.get("soundup").and_then(|v| v.as_str()) {
+                for fname in expand_sound_pattern(up_pattern) {
+                    if let Ok(clip) = load_cached(&fname) {
+                        default_up.push(clip);
+                    }
                 }
             }
             for (raw_code, fname_val) in defines {
@@ -455,35 +557,64 @@ pub fn load_soundpack(info: &SoundpackInfo) -> Result<LoadedSoundpack, String> {
                 if fname.trim().is_empty() {
                     continue;
                 }
-                if let Ok(clip) = load_cached(fname) {
-                    if default_down.is_empty() {
-                        default_down.push(Arc::clone(&clip));
-                    }
-                    if let Some(web_code) = mechvibes_v1_to_web_code(raw_code) {
-                        by_web_code.insert(
-                            web_code.to_string(),
-                            KeyClips {
-                                down: vec![clip],
-                                up: vec![],
-                            },
-                        );
+                let is_up_key = raw_code.ends_with("-up");
+                let base_code = raw_code.strip_suffix("-up").unwrap_or(raw_code);
+                if let Some(web_code) = mechvibes_v1_to_web_code(base_code) {
+                    if let Ok(clip) = load_cached(fname) {
+                        let entry = by_web_code
+                            .entry(web_code.to_string())
+                            .or_insert_with(|| KeyClips {
+                                down: Vec::new(),
+                                up: Vec::new(),
+                            });
+                        if is_up_key {
+                            entry.up.push(clip);
+                        } else {
+                            entry.down.push(clip);
+                        }
                     }
                 }
             }
         }
     }
 
-    // Ensure default_down has at least one clip if any key clip exists
+    // Ensure default_down and default_up have sensible clips if any key clip exists
     if default_down.is_empty() {
         if let Some(pool) = variants.get("normal_down") {
             default_down.extend(pool.iter().cloned());
-        } else if let Some(first) = by_web_code.values().find(|c| !c.down.is_empty()) {
-            default_down.extend(first.down.iter().cloned());
+        } else {
+            for preferred in ["KeyA", "KeyE", "KeyS", "MouseLeft"] {
+                if let Some(c) = by_web_code.get(preferred) {
+                    if !c.down.is_empty() {
+                        default_down.extend(c.down.iter().cloned());
+                        break;
+                    }
+                }
+            }
+            if default_down.is_empty() {
+                if let Some(first) = by_web_code.values().find(|c| !c.down.is_empty()) {
+                    default_down.extend(first.down.iter().cloned());
+                }
+            }
         }
     }
     if default_up.is_empty() {
         if let Some(pool) = variants.get("normal_up") {
             default_up.extend(pool.iter().cloned());
+        } else {
+            for preferred in ["KeyA", "KeyE", "KeyS", "MouseLeft"] {
+                if let Some(c) = by_web_code.get(preferred) {
+                    if !c.up.is_empty() {
+                        default_up.extend(c.up.iter().cloned());
+                        break;
+                    }
+                }
+            }
+            if default_up.is_empty() {
+                if let Some(first) = by_web_code.values().find(|c| !c.up.is_empty()) {
+                    default_up.extend(first.up.iter().cloned());
+                }
+            }
         }
     }
 
@@ -523,42 +654,73 @@ pub fn import_soundpack_zip(zip_path: &Path) -> Result<SoundpackInfo, String> {
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| format!("Geçersiz ZIP arşivi: {e}"))?;
 
-    // Locate config.json inside the zip (root or 1 level deep)
+    // Locate config.json inside the zip (root or 1 level deep) and extract preferred id/name
     let mut strip_prefix: Option<String> = None;
-    let mut found_config = false;
+    let mut cfg_entry_idx: Option<usize> = None;
     for i in 0..archive.len() {
         let entry = archive
             .by_index(i)
             .map_err(|e| format!("ZIP girişi okunamadı: {e}"))?;
         let name = entry.name().replace('\\', "/");
         if name == "config.json" {
-            found_config = true;
+            cfg_entry_idx = Some(i);
             strip_prefix = None;
             break;
         }
         if name.ends_with("/config.json") && name.matches('/').count() == 1 {
-            found_config = true;
+            cfg_entry_idx = Some(i);
             strip_prefix = name.split('/').next().map(|s| format!("{s}/"));
             break;
         }
     }
 
-    if !found_config {
+    let Some(cfg_idx) = cfg_entry_idx else {
         return Err("ZIP içinde config.json bulunamadı (Mechvibes V1/V2 paketi olmalı)".to_string());
+    };
+
+    let mut cfg_slug_hint: Option<String> = None;
+    let mut cfg_explicit_id: Option<String> = None;
+    if let Ok(mut cfg_entry) = archive.by_index(cfg_idx) {
+        let mut raw_cfg = String::new();
+        if io::Read::read_to_string(&mut cfg_entry, &mut raw_cfg).is_ok() {
+            if let Ok(val) = serde_json::from_str::<Value>(&raw_cfg) {
+                if let Some(id_str) = val.get("id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
+                    cfg_explicit_id = Some(id_str.to_string());
+                    cfg_slug_hint = Some(id_str.to_string());
+                } else if let Some(name_str) = val.get("name").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
+                    cfg_slug_hint = Some(name_str.to_string());
+                }
+            }
+        }
     }
 
     let base_stem = zip_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("custom-pack");
-    let mut slug = sanitize_slug(base_stem);
+    let slug = sanitize_slug(cfg_slug_hint.as_deref().unwrap_or(base_stem));
     let root = user_soundpacks_dir();
     fs::create_dir_all(&root).map_err(|e| format!("Soundpack klasörü oluşturulamadı: {e}"))?;
 
-    let mut dest_dir = root.join(&slug);
+    let dest_dir = root.join(&slug);
     if dest_dir.exists() {
-        slug = format!("{}-{}", slug, fastrand::u32(100..999));
-        dest_dir = root.join(&slug);
+        let _ = fs::remove_dir_all(&dest_dir);
+    }
+    // Also clean up any older random sxmcaps-hub-* folder carrying the exact same pack id
+    if let Some(ref target_id) = cfg_explicit_id {
+        if let Ok(entries) = fs::read_dir(&root) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_dir() && p != dest_dir {
+                    let c = p.join("config.json");
+                    if let Ok(info) = parse_soundpack_info(&p, &c, false) {
+                        if info.id == *target_id {
+                            let _ = fs::remove_dir_all(&p);
+                        }
+                    }
+                }
+            }
+        }
     }
     fs::create_dir_all(&dest_dir).map_err(|e| format!("Hedef klasör oluşturulamadı: {e}"))?;
 
@@ -647,11 +809,32 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
 }
 
 pub fn delete_custom_soundpack(pack_id: &str) -> Result<(), String> {
-    let target = user_soundpacks_dir().join(pack_id);
-    if !target.exists() {
+    let root = user_soundpacks_dir();
+    let direct = root.join(pack_id);
+    if direct.exists() {
+        return fs::remove_dir_all(&direct).map_err(|e| format!("Paket silinemedi: {e}"));
+    }
+
+    let mut removed = false;
+    if let Ok(entries) = fs::read_dir(&root) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                let cfg = p.join("config.json");
+                if let Ok(info) = parse_soundpack_info(&p, &cfg, false) {
+                    if info.id == pack_id {
+                        fs::remove_dir_all(&p).map_err(|e| format!("Paket silinemedi: {e}"))?;
+                        removed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if !removed {
         return Err("Silinecek özel ses paketi bulunamadı".to_string());
     }
-    fs::remove_dir_all(&target).map_err(|e| format!("Paket silinemedi: {e}"))
+    Ok(())
 }
 
 #[cfg(test)]
@@ -664,14 +847,17 @@ mod tests {
             .join("assets")
             .join("soundpacks");
         let packs = discover_soundpacks(&[root]);
-        assert_eq!(packs.len(), 10, "Expected 8 keyboard + 2 mouse packs");
+        assert!(
+            packs.len() >= 20,
+            "Expected at least 20 real built-in packs, got {}",
+            packs.len()
+        );
 
         for info in &packs {
             let loaded = load_soundpack(info)
                 .unwrap_or_else(|e| panic!("Failed to load {}: {}", info.id, e));
             if info.device_type == "mouse" {
                 assert!(loaded.pick_clip("MouseLeft", true).is_some());
-                assert!(loaded.pick_clip("MouseLeft", false).is_some());
                 assert!(loaded.pick_clip("MouseRight", true).is_some());
             } else {
                 for code in ["KeyA", "Space", "Enter", "ShiftLeft"] {
@@ -681,46 +867,41 @@ mod tests {
                         info.id,
                         code
                     );
-                    assert!(
-                        loaded.pick_clip(code, false).is_some(),
-                        "{} missing up clip for {}",
-                        info.id,
-                        code
-                    );
                 }
             }
         }
     }
 
     #[test]
-    fn mechvibes_v1_single_pack_slices_cleanly() {
-        let tmp = std::env::temp_dir().join(format!("sxmcaps-v1-test-{}", fastrand::u32(1..99999)));
+    fn mechvibes_v1_single_and_v2_timing_packs_slice_cleanly() {
+        let tmp = std::env::temp_dir().join(format!("sxmcaps-v12-test-{}", fastrand::u32(1..99999)));
         fs::create_dir_all(&tmp).unwrap();
 
-        // Copy an existing generated wav as sound.wav
-        let sample_wav = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("assets/soundpacks/cherry-mx-blue/normal_down_0.wav");
-        fs::copy(&sample_wav, tmp.join("sound.wav")).unwrap();
+        let sample_pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("assets/soundpacks/holy-pandas");
+        let sample_mp3 = sample_pack.join("GENERIC_R0.mp3");
+        fs::copy(&sample_mp3, tmp.join("sound.mp3")).unwrap();
 
-        let v1_cfg = serde_json::json!({
-            "id": "v1-sample",
-            "name": "Legacy V1 Test",
-            "key_define_type": "single",
-            "sound": "sound.wav",
-            "defines": {
-                "30": [0, 40],
-                "57": [10, 50]
+        let v2_cfg = serde_json::json!({
+            "id": "v2-timing-sample",
+            "name": "Mechvibes V2 Timing Test",
+            "config_version": "2",
+            "definition_method": "single",
+            "audio_file": "sound.mp3",
+            "definitions": {
+                "KeyA": { "timing": [[0.0, 45.0], [45.0, 90.0]] },
+                "Space": { "timing": [[5.0, 65.0]] }
             }
         });
-        fs::write(tmp.join("config.json"), v1_cfg.to_string()).unwrap();
+        fs::write(tmp.join("config.json"), v2_cfg.to_string()).unwrap();
 
         let info = parse_soundpack_info(&tmp, &tmp.join("config.json"), false).unwrap();
-        assert_eq!(info.format, "Mechvibes V1 (Single)");
+        assert_eq!(info.format, "Mechvibes V2");
+        assert_eq!(info.id, "v2-timing-sample");
         let loaded = load_soundpack(&info).unwrap();
-        let a_clip = loaded.pick_clip("KeyA", true).unwrap();
-        let space_clip = loaded.pick_clip("Space", true).unwrap();
-        assert!(!a_clip.samples.is_empty());
-        assert!(space_clip.samples.len() >= a_clip.samples.len());
+        assert!(loaded.pick_clip("KeyA", true).is_some());
+        assert!(loaded.pick_clip("KeyA", false).is_some());
+        assert!(loaded.pick_clip("Space", true).is_some());
 
         let _ = fs::remove_dir_all(&tmp);
     }

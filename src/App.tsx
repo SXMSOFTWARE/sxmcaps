@@ -14,6 +14,7 @@ import {
   UiInputEvent,
   UpdateCheckResult,
 } from './types';
+import { I18nProvider, resolveLanguage, TRANSLATIONS } from './i18n';
 import { KeyboardVisualizer } from './components/KeyboardVisualizer';
 import { SoundpackGrid } from './components/SoundpackGrid';
 import { MouseSection } from './components/MouseSection';
@@ -27,6 +28,7 @@ import {
   BarChart3,
   Cpu,
   Keyboard,
+  Languages,
   Mouse,
   Power,
   Scissors,
@@ -49,7 +51,7 @@ export function App() {
   const [soundpacks, setSoundpacks] = useState<SoundpackInfo[]>([]);
   const [hubCatalog, setHubCatalog] = useState<HubPackEntry[]>([]);
   const [soundpacksDir, setSoundpacksDir] = useState('');
-  const [appVersion, setAppVersion] = useState('v0.2.0');
+  const [appVersion, setAppVersion] = useState('v0.2.1');
   const [inputStatus, setInputStatus] = useState<InputStatus>({
     has_permission: true,
     active_devices: [],
@@ -81,6 +83,11 @@ export function App() {
   const keystrokeTimestampsRef = useRef<number[]>([]);
   const globalActiveRef = useRef(false);
 
+  const resolvedLang = resolveLanguage(settings?.language);
+  const t = TRANSLATIONS[resolvedLang];
+  const tRef = useRef(t);
+  tRef.current = t;
+
   const showToast = useCallback((text: string, isError = false) => {
     setToast({ text, isError });
     setTimeout(() => {
@@ -91,7 +98,7 @@ export function App() {
   const recordKeystrokeForWpm = useCallback(() => {
     const now = Date.now();
     const cutoff = now - 10_000;
-    const arr = keystrokeTimestampsRef.current.filter((t) => t > cutoff);
+    const arr = keystrokeTimestampsRef.current.filter((ts) => ts > cutoff);
     arr.push(now);
     keystrokeTimestampsRef.current = arr;
     const nextWpm = Math.round((arr.length / 5) * 6);
@@ -104,7 +111,7 @@ export function App() {
   useEffect(() => {
     const timer = setInterval(() => {
       const cutoff = Date.now() - 10_000;
-      const arr = keystrokeTimestampsRef.current.filter((t) => t > cutoff);
+      const arr = keystrokeTimestampsRef.current.filter((ts) => ts > cutoff);
       keystrokeTimestampsRef.current = arr;
       setWpm(Math.round((arr.length / 5) * 6));
     }, 1000);
@@ -122,7 +129,7 @@ export function App() {
         setSoundpacksDir(dto.soundpacks_dir);
         setAppVersion(dto.app_version);
       })
-      .catch((err) => showToast(`Başlatma hatası: ${err}`, true));
+      .catch((err) => showToast(`${tRef.current.toasts.initErr}: ${err}`, true));
 
     invoke<ActiveWindowInfo | null>('get_active_window_info')
       .then((w) => setActiveWindow(w))
@@ -220,14 +227,6 @@ export function App() {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat || globalActiveRef.current) return;
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') &&
-        !target.dataset.sandbox
-      ) {
-        // Still allow sound when typing in studio/search? Actually let typing test sandbox play always, skip form inputs only if needed
-      }
       const code = e.code || 'KeyA';
       setPressedKeys((prev) => new Set(prev).add(code));
       setLastKeyLabel(code);
@@ -310,8 +309,15 @@ export function App() {
       });
       setSettings(saved);
     } catch (err) {
-      showToast(`Ayar kaydedilemedi: ${err}`, true);
+      showToast(`${t.toasts.saveErr}: ${err}`, true);
     }
+  };
+
+  const handleCycleLanguage = () => {
+    if (!settings) return;
+    const cur = settings.language || 'auto';
+    const next = cur === 'auto' ? 'tr' : cur === 'tr' ? 'en' : 'auto';
+    handleUpdateSettings({ ...settings, language: next });
   };
 
   const handleSelectKeyboardPack = async (packId: string) => {
@@ -321,7 +327,7 @@ export function App() {
       });
       setSettings(updated);
     } catch (err) {
-      showToast(`Paket yüklenemedi: ${err}`, true);
+      showToast(`${t.toasts.packLoadErr}: ${err}`, true);
     }
   };
 
@@ -332,7 +338,7 @@ export function App() {
       });
       setSettings(updated);
     } catch (err) {
-      showToast(`Fare paketi yüklenemedi: ${err}`, true);
+      showToast(`${t.toasts.mouseLoadErr}: ${err}`, true);
     }
   };
 
@@ -401,10 +407,10 @@ export function App() {
       const res = await invoke<SoundpackInfo[] | null>('pick_and_import_zip');
       if (res) {
         setSoundpacks(res);
-        showToast('ZIP ses paketi başarıyla içe aktarıldı.');
+        showToast(t.toasts.zipImported);
       }
     } catch (err) {
-      showToast(`ZIP içe aktarma hatası: ${err}`, true);
+      showToast(`${t.toasts.zipErr}: ${err}`, true);
     }
   };
 
@@ -413,10 +419,10 @@ export function App() {
       const res = await invoke<SoundpackInfo[] | null>('pick_and_import_folder');
       if (res) {
         setSoundpacks(res);
-        showToast('Ses paketi klasörü başarıyla içe aktarıldı.');
+        showToast(t.toasts.folderImported);
       }
     } catch (err) {
-      showToast(`Klasör içe aktarma hatası: ${err}`, true);
+      showToast(`${t.toasts.folderErr}: ${err}`, true);
     }
   };
 
@@ -426,9 +432,9 @@ export function App() {
       setSoundpacks(res);
       const refreshed = await invoke<InitialStateDto>('get_initial_state');
       setSettings(refreshed.settings);
-      showToast('Özel ses paketi silindi.');
+      showToast(t.toasts.deleted);
     } catch (err) {
-      showToast(`Silinemedi: ${err}`, true);
+      showToast(`${t.toasts.deleteErr}: ${err}`, true);
     }
   };
 
@@ -438,10 +444,10 @@ export function App() {
         packId,
       });
       if (savedPath) {
-        showToast(`Paket dışa aktarıldı: ${savedPath}`);
+        showToast(`${t.toasts.exported}: ${savedPath}`);
       }
     } catch (err) {
-      showToast(`Dışa aktarma hatası: ${err}`, true);
+      showToast(`${t.toasts.exportErr}: ${err}`, true);
     }
   };
 
@@ -454,9 +460,9 @@ export function App() {
     try {
       const res = await invoke<SoundpackInfo[]>('install_hub_pack', { url });
       setSoundpacks(res);
-      showToast('Pack Hub paketi indirildi ve kuruldu.');
+      showToast(t.toasts.hubInstalled);
     } catch (err) {
-      showToast(`Kurulum hatası: ${err}`, true);
+      showToast(`${t.toasts.hubErr}: ${err}`, true);
     }
   };
 
@@ -470,9 +476,9 @@ export function App() {
       const refreshed = await invoke<InitialStateDto>('get_initial_state');
       setSettings(refreshed.settings);
       setSection('keyboard');
-      showToast(`"${created.name}" oluşturuldu ve aktifleştirildi.`);
+      showToast(t.toasts.studioCreated(created.name));
     } catch (err) {
-      showToast(`Paket oluşturulamadı: ${err}`, true);
+      showToast(`${t.toasts.studioErr}: ${err}`, true);
     }
   };
 
@@ -480,14 +486,9 @@ export function App() {
     const status = await invoke<InputStatus>('enable_global_input_udev');
     setInputStatus(status);
     if (status.has_permission && status.active_devices.length > 0) {
-      showToast(
-        `Global dinleme aktif edildi! (${status.active_devices.length} cihaz)`
-      );
+      showToast(t.toasts.udevActive(status.active_devices.length));
     } else {
-      showToast(
-        'udev kuralı yazıldı ancak cihaz henüz açılmadı. Yenile butonuna basın veya oturumu kapatıp açın.',
-        true
-      );
+      showToast(t.toasts.udevWait, true);
     }
   };
 
@@ -495,16 +496,16 @@ export function App() {
     const status = await invoke<InputStatus>('rescan_input_devices');
     setInputStatus(status);
     if (status.has_permission && status.active_devices.length > 0) {
-      showToast(`${status.active_devices.length} giriş cihazı aktif.`);
+      showToast(t.toasts.rescanOk(status.active_devices.length));
     } else {
-      showToast('Henüz global giriş izni algılanamadı.', true);
+      showToast(t.toasts.rescanNone, true);
     }
   };
 
   if (!settings) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#050506] text-xs tracking-widest text-zinc-400 uppercase">
-        sxmcaps yükleniyor...
+        {t.loading}
       </div>
     );
   }
@@ -515,261 +516,286 @@ export function App() {
     icon: React.ComponentType<{ className?: string }>;
     badge?: string;
   }[] = [
-    { id: 'keyboard', label: 'Switchler', icon: Keyboard },
+    { id: 'keyboard', label: t.nav.keyboard, icon: Keyboard },
     {
       id: 'mouse',
-      label: 'Fare',
+      label: t.nav.mouse,
       icon: Mouse,
-      badge: settings.mouse_enabled ? 'AÇIK' : 'KAPALI',
+      badge: settings.mouse_enabled ? t.onBadge : t.offBadge,
     },
-    { id: 'audio', label: 'Akustik DSP', icon: Sliders },
-    { id: 'studio', label: 'Stüdyo', icon: Scissors },
-    { id: 'stats', label: 'İstatistik', icon: BarChart3 },
+    { id: 'audio', label: t.nav.audio, icon: Sliders },
+    { id: 'studio', label: t.nav.studio, icon: Scissors },
+    { id: 'stats', label: t.nav.stats, icon: BarChart3 },
     {
       id: 'system',
-      label: 'Sistem',
+      label: t.nav.system,
       icon: Cpu,
       badge: isGlobalActive ? `${inputStatus.active_devices.length}` : '!',
     },
   ];
 
+  const langPref = settings.language || 'auto';
+  const langPillText =
+    langPref === 'auto'
+      ? `AUTO (${resolvedLang.toUpperCase()})`
+      : resolvedLang.toUpperCase();
+
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-[#050506] text-zinc-100">
-      {/* Top Monochrome Header */}
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#09090b] px-5 py-2.5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/25 bg-white text-black shadow-[0_2px_0_#71717a]">
-            <span className="font-mono text-[11px] font-black tracking-tighter">
-              SXM
-            </span>
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold tracking-tight text-white">
-                sxmcaps
-              </h1>
-              <span className="rounded border border-white/15 bg-white/[0.04] px-1.5 py-0.2 font-mono text-[10px] text-zinc-400">
-                {appVersion}
+    <I18nProvider preference={settings.language}>
+      <div className="relative flex h-screen flex-col overflow-hidden bg-[#050506] text-zinc-100">
+        {/* Top Monochrome Header */}
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#09090b] px-5 py-2.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/25 bg-white text-black shadow-[0_2px_0_#71717a]">
+              <span className="font-mono text-[11px] font-black tracking-tighter">
+                SXM
               </span>
             </div>
-            <p className="text-[11px] text-zinc-500">
-              Monochrome Mechanical Sound Studio
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-bold tracking-tight text-white">
+                  sxmcaps
+                </h1>
+                <span className="rounded border border-white/15 bg-white/[0.04] px-1.5 py-0.2 font-mono text-[10px] text-zinc-400">
+                  {appVersion}
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-500">{t.appSubtitle}</p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setSection('system')}
-            title={
-              inputStatus.active_devices.length > 0
-                ? `Dinlenen cihazlar: ${inputStatus.active_devices.join(', ')}`
-                : 'Global dinleme izni gerekiyor'
-            }
-            className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-medium transition ${
-              isGlobalActive
-                ? 'border-white/25 bg-white/[0.06] text-white hover:border-white/50'
-                : 'border-white/20 bg-black text-zinc-400 hover:border-white/40 hover:text-white'
-            }`}
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCycleLanguage}
+              title={t.system.language}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/10 bg-[#0e0e11] px-2.5 py-1 font-mono text-[10px] font-semibold text-zinc-300 hover:border-white/30 hover:text-white"
+            >
+              <Languages className="h-3.5 w-3.5 text-white" />
+              {langPillText}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSection('system')}
+              title={
+                inputStatus.active_devices.length > 0
+                  ? `${t.listenedDevices}: ${inputStatus.active_devices.join(', ')}`
+                  : t.permissionNeededTooltip
+              }
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-medium transition ${
                 isGlobalActive
-                  ? 'animate-pulse bg-white shadow-[0_0_8px_#fff]'
-                  : 'border border-zinc-400 bg-transparent'
+                  ? 'border-white/25 bg-white/[0.06] text-white hover:border-white/50'
+                  : 'border-white/20 bg-black text-zinc-400 hover:border-white/40 hover:text-white'
               }`}
-            />
-            {isGlobalActive
-              ? `Global Aktif (${inputStatus.active_devices.length})`
-              : 'Pencere İçi'}
-          </button>
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isGlobalActive
+                    ? 'animate-pulse bg-white shadow-[0_0_8px_#fff]'
+                    : 'border border-zinc-400 bg-transparent'
+                }`}
+              />
+              {isGlobalActive
+                ? t.globalActive(inputStatus.active_devices.length)
+                : t.inWindow}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setSection('stats')}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/10 bg-[#0e0e11] px-3 py-1 font-mono text-[11px] text-zinc-300 hover:border-white/30"
-          >
-            <Activity className="h-3.5 w-3.5 text-white" />
-            <span>{stats.total_keystrokes.toLocaleString('tr-TR')} vuruş</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setSection('stats')}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/10 bg-[#0e0e11] px-3 py-1 font-mono text-[11px] text-zinc-300 hover:border-white/30"
+            >
+              <Activity className="h-3.5 w-3.5 text-white" />
+              <span>
+                {stats.total_keystrokes.toLocaleString(t.locale)}{' '}
+                {t.strokesUnit}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() =>
-              handleUpdateSettings({ ...settings, enabled: !settings.enabled })
-            }
-            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-semibold transition ${
-              settings.enabled
-                ? 'border-white bg-white text-black hover:bg-zinc-200'
-                : 'border-white/15 bg-[#121216] text-zinc-400 hover:border-white/30 hover:text-white'
+            <button
+              type="button"
+              onClick={() =>
+                handleUpdateSettings({ ...settings, enabled: !settings.enabled })
+              }
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-semibold transition ${
+                settings.enabled
+                  ? 'border-white bg-white text-black hover:bg-zinc-200'
+                  : 'border-white/15 bg-[#121216] text-zinc-400 hover:border-white/30 hover:text-white'
+              }`}
+            >
+              {settings.enabled ? (
+                <>
+                  <Volume2 className="h-3.5 w-3.5" />
+                  {t.soundOn}
+                </>
+              ) : (
+                <>
+                  <VolumeX className="h-3.5 w-3.5" />
+                  {t.muted}
+                </>
+              )}
+              <Power className="ml-0.5 h-3 w-3 opacity-70" />
+            </button>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4">
+          <PermissionBanner
+            status={inputStatus}
+            onEnableUdev={handleEnableUdev}
+            onRescan={handleRescanInput}
+          />
+
+          <KeyboardVisualizer
+            pressedKeys={pressedKeys}
+            activePackName={activePack?.name ?? 'Cherry MX Brown (PBT)'}
+            activePackTag={activePack?.tag ?? 'Tactile'}
+            wpm={wpm}
+            lastKeyLabel={lastKeyLabel}
+            onKeyPress={handleKeyPressVisual}
+          />
+
+          {/* Categorized 6-Tab Navigation Bar */}
+          <nav className="flex flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-[#0b0b0e] p-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = section === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSection(item.id)}
+                  className={`inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+                    active
+                      ? 'bg-white text-black shadow-sm'
+                      : 'text-zinc-400 hover:bg-white/[0.05] hover:text-white'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                  {item.badge && (
+                    <span
+                      className={`rounded px-1.5 py-0.2 font-mono text-[9px] ${
+                        active
+                          ? 'bg-black text-white'
+                          : 'border border-white/15 bg-black/50 text-zinc-300'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Active Section */}
+          <div className="min-h-0 flex-1">
+            {section === 'keyboard' && (
+              <SoundpackGrid
+                soundpacks={soundpacks}
+                activeKeyboardPack={settings.active_keyboard_pack}
+                hubCatalog={hubCatalog}
+                onLoadHubCatalog={handleLoadHubCatalog}
+                onInstallHubPack={handleInstallHubPack}
+                onSelectKeyboard={handleSelectKeyboardPack}
+                onSelectMouse={(id) => {
+                  handleSelectMousePack(id);
+                  setSection('mouse');
+                }}
+                onPreview={handlePreviewKeyboardPack}
+                onDeleteCustom={handleDeleteCustom}
+                onExportZip={handleExportZip}
+              />
+            )}
+
+            {section === 'mouse' && (
+              <MouseSection
+                settings={settings}
+                soundpacks={soundpacks}
+                pressedMouseButtons={pressedMouseButtons}
+                onUpdateSettings={handleUpdateSettings}
+                onSelectMousePack={handleSelectMousePack}
+                onTestMouseButton={handleTestMouseButton}
+                onDeleteCustom={handleDeleteCustom}
+                onExportZip={handleExportZip}
+              />
+            )}
+
+            {section === 'audio' && (
+              <AudioControls
+                settings={settings}
+                audioDevices={audioDevices}
+                onChange={handleUpdateSettings}
+              />
+            )}
+
+            {section === 'studio' && (
+              <StudioSection
+                onPickAudio={() =>
+                  invoke<AudioInspectResult | null>('pick_studio_audio_file')
+                }
+                onPreviewSlice={(path, startMs, durationMs) =>
+                  invoke('preview_studio_slice', { path, startMs, durationMs })
+                }
+                onSavePack={handleSaveStudioPack}
+              />
+            )}
+
+            {section === 'stats' && (
+              <StatsSection
+                stats={stats}
+                onResetStats={() => {
+                  invoke<StatsData>('reset_stats')
+                    .then((fresh) => {
+                      setStats(fresh);
+                      showToast(t.toasts.statsReset);
+                    })
+                    .catch((e) => showToast(`${t.toasts.statsResetErr}: ${e}`, true));
+                }}
+              />
+            )}
+
+            {section === 'system' && (
+              <SystemSection
+                settings={settings}
+                soundpacks={soundpacks}
+                inputStatus={inputStatus}
+                activeWindow={activeWindow}
+                soundpacksDir={soundpacksDir}
+                appVersion={appVersion}
+                onUpdateSettings={handleUpdateSettings}
+                onEnableUdev={handleEnableUdev}
+                onRescanInput={handleRescanInput}
+                onImportZip={handleImportZip}
+                onImportFolder={handleImportFolder}
+                onOpenFolder={() =>
+                  invoke('open_soundpacks_folder').catch((e) =>
+                    showToast(`${t.toasts.openDirErr}: ${e}`, true)
+                  )
+                }
+                onCheckUpdate={() => invoke<UpdateCheckResult>('check_app_update')}
+              />
+            )}
+          </div>
+        </main>
+
+        {/* Monochrome Toast Notification */}
+        {toast && (
+          <div
+            className={`fixed right-5 bottom-5 z-50 rounded-xl border px-4 py-2.5 text-xs font-medium shadow-2xl ${
+              toast.isError
+                ? 'border-white/40 bg-[#141418] text-white'
+                : 'border-white bg-white text-black'
             }`}
           >
-            {settings.enabled ? (
-              <>
-                <Volume2 className="h-3.5 w-3.5" />
-                Ses Aktif
-              </>
-            ) : (
-              <>
-                <VolumeX className="h-3.5 w-3.5" />
-                Susturuldu
-              </>
-            )}
-            <Power className="ml-0.5 h-3 w-3 opacity-70" />
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4">
-        <PermissionBanner
-          status={inputStatus}
-          onEnableUdev={handleEnableUdev}
-          onRescan={handleRescanInput}
-        />
-
-        <KeyboardVisualizer
-          pressedKeys={pressedKeys}
-          activePackName={activePack?.name ?? 'Holy Panda'}
-          activePackTag={activePack?.tag ?? 'Tactile'}
-          wpm={wpm}
-          lastKeyLabel={lastKeyLabel}
-          onKeyPress={handleKeyPressVisual}
-        />
-
-        {/* Categorized 6-Tab Navigation Bar */}
-        <nav className="flex flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-[#0b0b0e] p-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = section === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSection(item.id)}
-                className={`inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
-                  active
-                    ? 'bg-white text-black shadow-sm'
-                    : 'text-zinc-400 hover:bg-white/[0.05] hover:text-white'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{item.label}</span>
-                {item.badge && (
-                  <span
-                    className={`rounded px-1.5 py-0.2 font-mono text-[9px] ${
-                      active
-                        ? 'bg-black text-white'
-                        : 'border border-white/15 bg-black/50 text-zinc-300'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Active Section */}
-        <div className="min-h-0 flex-1">
-          {section === 'keyboard' && (
-            <SoundpackGrid
-              soundpacks={soundpacks}
-              activeKeyboardPack={settings.active_keyboard_pack}
-              hubCatalog={hubCatalog}
-              onLoadHubCatalog={handleLoadHubCatalog}
-              onInstallHubPack={handleInstallHubPack}
-              onSelectKeyboard={handleSelectKeyboardPack}
-              onPreview={handlePreviewKeyboardPack}
-              onDeleteCustom={handleDeleteCustom}
-              onExportZip={handleExportZip}
-            />
-          )}
-
-          {section === 'mouse' && (
-            <MouseSection
-              settings={settings}
-              soundpacks={soundpacks}
-              pressedMouseButtons={pressedMouseButtons}
-              onUpdateSettings={handleUpdateSettings}
-              onSelectMousePack={handleSelectMousePack}
-              onTestMouseButton={handleTestMouseButton}
-            />
-          )}
-
-          {section === 'audio' && (
-            <AudioControls
-              settings={settings}
-              audioDevices={audioDevices}
-              onChange={handleUpdateSettings}
-            />
-          )}
-
-          {section === 'studio' && (
-            <StudioSection
-              onPickAudio={() =>
-                invoke<AudioInspectResult | null>('pick_studio_audio_file')
-              }
-              onPreviewSlice={(path, startMs, durationMs) =>
-                invoke('preview_studio_slice', { path, startMs, durationMs })
-              }
-              onSavePack={handleSaveStudioPack}
-            />
-          )}
-
-          {section === 'stats' && (
-            <StatsSection
-              stats={stats}
-              onResetStats={() => {
-                invoke<StatsData>('reset_stats')
-                  .then((fresh) => {
-                    setStats(fresh);
-                    showToast('İstatistikler sıfırlandı.');
-                  })
-                  .catch((e) => showToast(`Sıfırlanamadı: ${e}`, true));
-              }}
-            />
-          )}
-
-          {section === 'system' && (
-            <SystemSection
-              settings={settings}
-              soundpacks={soundpacks}
-              inputStatus={inputStatus}
-              activeWindow={activeWindow}
-              soundpacksDir={soundpacksDir}
-              appVersion={appVersion}
-              onUpdateSettings={handleUpdateSettings}
-              onEnableUdev={handleEnableUdev}
-              onRescanInput={handleRescanInput}
-              onImportZip={handleImportZip}
-              onImportFolder={handleImportFolder}
-              onOpenFolder={() =>
-                invoke('open_soundpacks_folder').catch((e) =>
-                  showToast(`Klasör açılamadı: ${e}`, true)
-                )
-              }
-              onCheckUpdate={() => invoke<UpdateCheckResult>('check_app_update')}
-            />
-          )}
-        </div>
-      </main>
-
-      {/* Monochrome Toast Notification */}
-      {toast && (
-        <div
-          className={`fixed right-5 bottom-5 z-50 rounded-xl border px-4 py-2.5 text-xs font-medium shadow-2xl ${
-            toast.isError
-              ? 'border-white/40 bg-[#141418] text-white'
-              : 'border-white bg-white text-black'
-          }`}
-        >
-          {toast.text}
-        </div>
-      )}
-    </div>
+            {toast.text}
+          </div>
+        )}
+      </div>
+    </I18nProvider>
   );
 }
 
