@@ -712,9 +712,322 @@ mod platform {
 }
 
 // ============================================================================
-// OTHER PLATFORMS (macOS fallback)
+// MACOS (Global CGEventTap via CoreGraphics / ApplicationServices)
 // ============================================================================
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+#[cfg(target_os = "macos")]
+mod platform {
+    use super::{GlobalInputEvent, InputStatus};
+    use crate::keycodes::MouseButtonKind;
+    use std::ffi::c_void;
+    use std::ptr;
+    use std::sync::{Arc, Mutex, OnceLock};
+
+    type CFMachPortRef = *mut c_void;
+    type CFRunLoopSourceRef = *mut c_void;
+    type CFRunLoopRef = *mut c_void;
+    type CFAllocatorRef = *const c_void;
+    type CFStringRef = *const c_void;
+    type CGEventTapProxy = *mut c_void;
+    type CGEventRef = *mut c_void;
+
+    type CGEventTapCallBack = unsafe extern "C" fn(
+        proxy: CGEventTapProxy,
+        event_type: u32,
+        event: CGEventRef,
+        user_info: *mut c_void,
+    ) -> CGEventRef;
+
+    const KCG_SESSION_EVENT_TAP: u32 = 1;
+    const KCG_HEAD_INSERT_EVENT_TAP: u32 = 0;
+    const KCG_EVENT_TAP_OPTION_LISTEN_ONLY: u32 = 1;
+
+    const KCG_EVENT_LEFT_MOUSE_DOWN: u32 = 1;
+    const KCG_EVENT_LEFT_MOUSE_UP: u32 = 2;
+    const KCG_EVENT_RIGHT_MOUSE_DOWN: u32 = 3;
+    const KCG_EVENT_RIGHT_MOUSE_UP: u32 = 4;
+    const KCG_EVENT_KEY_DOWN: u32 = 10;
+    const KCG_EVENT_KEY_UP: u32 = 11;
+    const KCG_EVENT_OTHER_MOUSE_DOWN: u32 = 25;
+    const KCG_EVENT_OTHER_MOUSE_UP: u32 = 26;
+
+    const KCG_MOUSE_EVENT_BUTTON_NUMBER: u32 = 3;
+    const KCG_KEYBOARD_EVENT_AUTOREPEAT: u32 = 8;
+    const KCG_KEYBOARD_EVENT_KEYCODE: u32 = 9;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventTapCreate(
+            tap: u32,
+            place: u32,
+            options: u32,
+            events_of_interest: u64,
+            callback: CGEventTapCallBack,
+            user_info: *mut c_void,
+        ) -> CFMachPortRef;
+        fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        static kCFRunLoopCommonModes: CFStringRef;
+        fn CFMachPortCreateRunLoopSource(
+            allocator: CFAllocatorRef,
+            port: CFMachPortRef,
+            order: isize,
+        ) -> CFRunLoopSourceRef;
+        fn CFRunLoopGetCurrent() -> CFRunLoopRef;
+        fn CFRunLoopAddSource(rl: CFRunLoopRef, source: CFRunLoopSourceRef, mode: CFStringRef);
+        fn CFRunLoopRun();
+        fn CFRunLoopStop(rl: CFRunLoopRef);
+    }
+
+    static CALLBACK: OnceLock<Arc<dyn Fn(GlobalInputEvent) + Send + Sync>> = OnceLock::new();
+
+    unsafe extern "C" fn event_tap_callback(
+        _proxy: CGEventTapProxy,
+        event_type: u32,
+        event: CGEventRef,
+        _user_info: *mut c_void,
+    ) -> CGEventRef {
+        if let Some(cb) = CALLBACK.get() {
+            match event_type {
+                KCG_EVENT_KEY_DOWN | KCG_EVENT_KEY_UP => {
+                    let is_down = event_type == KCG_EVENT_KEY_DOWN;
+                    let autorepeat =
+                        CGEventGetIntegerValueField(event, KCG_KEYBOARD_EVENT_AUTOREPEAT);
+                    if !is_down || autorepeat == 0 {
+                        let keycode =
+                            CGEventGetIntegerValueField(event, KCG_KEYBOARD_EVENT_KEYCODE) as u16;
+                        cb(GlobalInputEvent::Key {
+                            web_code: macos_keycode_to_web(keycode),
+                            is_down,
+                        });
+                    }
+                }
+                KCG_EVENT_LEFT_MOUSE_DOWN | KCG_EVENT_LEFT_MOUSE_UP => {
+                    cb(GlobalInputEvent::Mouse {
+                        button: MouseButtonKind::Left,
+                        is_down: event_type == KCG_EVENT_LEFT_MOUSE_DOWN,
+                    });
+                }
+                KCG_EVENT_RIGHT_MOUSE_DOWN | KCG_EVENT_RIGHT_MOUSE_UP => {
+                    cb(GlobalInputEvent::Mouse {
+                        button: MouseButtonKind::Right,
+                        is_down: event_type == KCG_EVENT_RIGHT_MOUSE_DOWN,
+                    });
+                }
+                KCG_EVENT_OTHER_MOUSE_DOWN | KCG_EVENT_OTHER_MOUSE_UP => {
+                    let btn_num =
+                        CGEventGetIntegerValueField(event, KCG_MOUSE_EVENT_BUTTON_NUMBER);
+                    let button = match btn_num {
+                        2 => MouseButtonKind::Middle,
+                        3 => MouseButtonKind::Side,
+                        _ => MouseButtonKind::Extra,
+                    };
+                    cb(GlobalInputEvent::Mouse {
+                        button,
+                        is_down: event_type == KCG_EVENT_OTHER_MOUSE_DOWN,
+                    });
+                }
+                _ => {}
+            }
+        }
+        event
+    }
+
+    pub struct PlatformHandle {
+        status: Arc<Mutex<InputStatus>>,
+        run_loop: Arc<Mutex<usize>>,
+    }
+
+    impl PlatformHandle {
+        pub fn get_status(&self) -> InputStatus {
+            let trusted = unsafe { AXIsProcessTrusted() };
+            if let Ok(mut g) = self.status.lock() {
+                g.has_permission = trusted;
+                g.active_devices = if trusted {
+                    vec!["macOS CGEventTap (Keyboard & Mouse)".to_string()]
+                } else {
+                    vec![]
+                };
+                return g.clone();
+            }
+            InputStatus::default()
+        }
+
+        pub fn trigger_rescan(&self) {}
+    }
+
+    impl Drop for PlatformHandle {
+        fn drop(&mut self) {
+            if let Ok(g) = self.run_loop.lock() {
+                if *g != 0 {
+                    unsafe {
+                        CFRunLoopStop(*g as CFRunLoopRef);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn start<F>(on_event: F) -> PlatformHandle
+    where
+        F: Fn(GlobalInputEvent) + Send + Sync + 'static,
+    {
+        let _ = CALLBACK.set(Arc::new(on_event));
+        let trusted = unsafe { AXIsProcessTrusted() };
+        let status = Arc::new(Mutex::new(InputStatus {
+            has_permission: trusted,
+            active_devices: if trusted {
+                vec!["macOS CGEventTap (Keyboard & Mouse)".to_string()]
+            } else {
+                vec![]
+            },
+            denied_devices: usize::from(!trusted),
+            session_type: "quartz".to_string(),
+            desktop: "macOS".to_string(),
+        }));
+        let run_loop = Arc::new(Mutex::new(0usize));
+        let rl_bg = Arc::clone(&run_loop);
+        let status_bg = Arc::clone(&status);
+
+        std::thread::Builder::new()
+            .name("sxmcaps-macos-tap".to_string())
+            .spawn(move || unsafe {
+                let mask: u64 = (1 << KCG_EVENT_KEY_DOWN)
+                    | (1 << KCG_EVENT_KEY_UP)
+                    | (1 << KCG_EVENT_LEFT_MOUSE_DOWN)
+                    | (1 << KCG_EVENT_LEFT_MOUSE_UP)
+                    | (1 << KCG_EVENT_RIGHT_MOUSE_DOWN)
+                    | (1 << KCG_EVENT_RIGHT_MOUSE_UP)
+                    | (1 << KCG_EVENT_OTHER_MOUSE_DOWN)
+                    | (1 << KCG_EVENT_OTHER_MOUSE_UP);
+
+                let tap = CGEventTapCreate(
+                    KCG_SESSION_EVENT_TAP,
+                    KCG_HEAD_INSERT_EVENT_TAP,
+                    KCG_EVENT_TAP_OPTION_LISTEN_ONLY,
+                    mask,
+                    event_tap_callback,
+                    ptr::null_mut(),
+                );
+                if tap.is_null() {
+                    if let Ok(mut g) = status_bg.lock() {
+                        g.has_permission = false;
+                        g.active_devices.clear();
+                    }
+                    return;
+                }
+                let source = CFMachPortCreateRunLoopSource(ptr::null(), tap, 0);
+                if source.is_null() {
+                    return;
+                }
+                let rl = CFRunLoopGetCurrent();
+                if let Ok(mut g) = rl_bg.lock() {
+                    *g = rl as usize;
+                }
+                CFRunLoopAddSource(rl, source, kCFRunLoopCommonModes);
+                CFRunLoopRun();
+            })
+            .expect("macOS CGEventTap thread spawn failed");
+
+        PlatformHandle { status, run_loop }
+    }
+
+    pub fn install_udev_input_rule() -> Result<(), String> {
+        Err("macOS'ta Sistem Ayarları -> Gizlilik ve Güvenlik -> Erişilebilirlik üzerinden sxmcaps'e izin verin".to_string())
+    }
+
+    fn macos_keycode_to_web(code: u16) -> &'static str {
+        match code {
+            0 => "KeyA",
+            1 => "KeyS",
+            2 => "KeyD",
+            3 => "KeyF",
+            4 => "KeyH",
+            5 => "KeyG",
+            6 => "KeyZ",
+            7 => "KeyX",
+            8 => "KeyC",
+            9 => "KeyV",
+            11 => "KeyB",
+            12 => "KeyQ",
+            13 => "KeyW",
+            14 => "KeyE",
+            15 => "KeyR",
+            16 => "KeyY",
+            17 => "KeyT",
+            18 => "Digit1",
+            19 => "Digit2",
+            20 => "Digit3",
+            21 => "Digit4",
+            22 => "Digit6",
+            23 => "Digit5",
+            24 => "Equal",
+            25 => "Digit9",
+            26 => "Digit7",
+            27 => "Minus",
+            28 => "Digit8",
+            29 => "Digit0",
+            30 => "BracketRight",
+            31 => "KeyO",
+            32 => "KeyU",
+            33 => "BracketLeft",
+            34 => "KeyI",
+            35 => "KeyP",
+            36 => "Enter",
+            37 => "KeyL",
+            38 => "KeyJ",
+            39 => "Quote",
+            40 => "KeyK",
+            41 => "Semicolon",
+            42 => "Backslash",
+            43 => "Comma",
+            44 => "Slash",
+            45 => "KeyN",
+            46 => "KeyM",
+            47 => "Period",
+            48 => "Tab",
+            49 => "Space",
+            50 => "Backquote",
+            51 => "Backspace",
+            53 => "Escape",
+            55 => "MetaLeft",
+            56 => "ShiftLeft",
+            57 => "CapsLock",
+            58 => "AltLeft",
+            59 => "ControlLeft",
+            60 => "ShiftRight",
+            61 => "AltRight",
+            62 => "ControlRight",
+            96 => "F5",
+            97 => "F6",
+            98 => "F7",
+            99 => "F3",
+            100 => "F8",
+            101 => "F9",
+            103 => "F11",
+            109 => "F10",
+            111 => "F12",
+            118 => "F4",
+            120 => "F2",
+            122 => "F1",
+            117 => "Delete",
+            123 => "ArrowLeft",
+            124 => "ArrowRight",
+            125 => "ArrowDown",
+            126 => "ArrowUp",
+            _ => "Unknown",
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 mod platform {
     use super::{GlobalInputEvent, InputStatus};
 

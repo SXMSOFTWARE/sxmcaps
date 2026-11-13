@@ -3,6 +3,16 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppProfileRule {
+    pub id: String,
+    pub name: String,
+    pub pattern: String,
+    pub pack_id: String,
+    pub mute: bool,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
     pub active_keyboard_pack: String,
@@ -17,6 +27,18 @@ pub struct AppSettings {
     pub stereo_pan: bool,
     pub minimize_to_tray: bool,
     pub audio_device: Option<String>,
+    // v0.2 Acoustic DSP
+    pub plate_preset: String, // "neutral" | "aluminum" | "polycarbonate" | "brass"
+    pub tape_mod: bool,
+    pub poron_foam: bool,
+    pub eq_low_db: f32,
+    pub eq_mid_db: f32,
+    pub eq_high_db: f32,
+    pub room_ambience: f32,
+    // v0.2 App Profiles & Autostart
+    pub profiles_enabled: bool,
+    pub app_profiles: Vec<AppProfileRule>,
+    pub autostart: bool,
 }
 
 impl Default for AppSettings {
@@ -34,6 +56,16 @@ impl Default for AppSettings {
             stereo_pan: true,
             minimize_to_tray: true,
             audio_device: None,
+            plate_preset: "neutral".to_string(),
+            tape_mod: false,
+            poron_foam: false,
+            eq_low_db: 0.0,
+            eq_mid_db: 0.0,
+            eq_high_db: 0.0,
+            room_ambience: 0.0,
+            profiles_enabled: false,
+            app_profiles: Vec::new(),
+            autostart: false,
         }
     }
 }
@@ -47,7 +79,10 @@ pub fn config_dir() -> PathBuf {
             }
         }
         let home = std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string());
-        return PathBuf::from(home).join("AppData").join("Roaming").join("sxmcaps");
+        return PathBuf::from(home)
+            .join("AppData")
+            .join("Roaming")
+            .join("sxmcaps");
     }
     #[cfg(target_os = "macos")]
     {

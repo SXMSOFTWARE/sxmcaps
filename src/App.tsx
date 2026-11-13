@@ -1,37 +1,55 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
+  ActiveWindowInfo,
   AppSettings,
+  AudioInspectResult,
+  HubPackEntry,
   InitialStateDto,
   InputStatus,
   SoundpackInfo,
+  StatsData,
+  StudioPackSpec,
   UiInputEvent,
+  UpdateCheckResult,
 } from './types';
 import { KeyboardVisualizer } from './components/KeyboardVisualizer';
 import { SoundpackGrid } from './components/SoundpackGrid';
 import { MouseSection } from './components/MouseSection';
 import { AudioControls } from './components/AudioControls';
+import { StudioSection } from './components/StudioSection';
+import { StatsSection } from './components/StatsSection';
 import { SystemSection } from './components/SystemSection';
 import { PermissionBanner } from './components/PermissionBanner';
 import {
   Activity,
+  BarChart3,
   Cpu,
   Keyboard,
   Mouse,
   Power,
+  Scissors,
   Sliders,
   Volume2,
   VolumeX,
 } from 'lucide-react';
 
-type ActiveSection = 'keyboard' | 'mouse' | 'audio' | 'system';
+type ActiveSection =
+  | 'keyboard'
+  | 'mouse'
+  | 'audio'
+  | 'studio'
+  | 'stats'
+  | 'system';
 
 export function App() {
   const [section, setSection] = useState<ActiveSection>('keyboard');
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [soundpacks, setSoundpacks] = useState<SoundpackInfo[]>([]);
+  const [hubCatalog, setHubCatalog] = useState<HubPackEntry[]>([]);
   const [soundpacksDir, setSoundpacksDir] = useState('');
+  const [appVersion, setAppVersion] = useState('v0.2.0');
   const [inputStatus, setInputStatus] = useState<InputStatus>({
     has_permission: true,
     active_devices: [],
@@ -39,8 +57,17 @@ export function App() {
     session_type: 'wayland',
     desktop: 'Hyprland',
   });
+  const [activeWindow, setActiveWindow] = useState<ActiveWindowInfo | null>(
+    null
+  );
   const [audioDevices, setAudioDevices] = useState<string[]>([]);
-  const [totalKeystrokes, setTotalKeystrokes] = useState(0);
+  const [stats, setStats] = useState<StatsData>({
+    total_keystrokes: 0,
+    total_mouse_clicks: 0,
+    peak_wpm: 0,
+    heatmap: {},
+    daily: {},
+  });
   const [pressedKeys, setPressedKeys] = useState<Set<string>>(new Set());
   const [pressedMouseButtons, setPressedMouseButtons] = useState<Set<string>>(
     new Set()
@@ -67,7 +94,11 @@ export function App() {
     const arr = keystrokeTimestampsRef.current.filter((t) => t > cutoff);
     arr.push(now);
     keystrokeTimestampsRef.current = arr;
-    setWpm(Math.round((arr.length / 5) * 6));
+    const nextWpm = Math.round((arr.length / 5) * 6);
+    setWpm(nextWpm);
+    if (nextWpm > 0) {
+      invoke('report_wpm', { wpm: nextWpm }).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -87,10 +118,15 @@ export function App() {
         setSoundpacks(dto.soundpacks);
         setInputStatus(dto.input_status);
         setAudioDevices(dto.audio_devices);
-        setTotalKeystrokes(dto.total_keystrokes);
+        setStats(dto.stats);
         setSoundpacksDir(dto.soundpacks_dir);
+        setAppVersion(dto.app_version);
       })
       .catch((err) => showToast(`Başlatma hatası: ${err}`, true));
+
+    invoke<ActiveWindowInfo | null>('get_active_window_info')
+      .then((w) => setActiveWindow(w))
+      .catch(() => {});
 
     const unlistenInput = listen<UiInputEvent>(
       'sxmcaps://input-event',
@@ -101,7 +137,7 @@ export function App() {
           is_mouse,
           total_keystrokes: total,
         } = event.payload;
-        setTotalKeystrokes(total);
+
         if (is_mouse) {
           setPressedMouseButtons((prev) => {
             const next = new Set(prev);
@@ -109,6 +145,12 @@ export function App() {
             else next.delete(web_code);
             return next;
           });
+          if (is_down) {
+            setStats((prev) => ({
+              ...prev,
+              total_mouse_clicks: prev.total_mouse_clicks + 1,
+            }));
+          }
         } else {
           setPressedKeys((prev) => {
             const next = new Set(prev);
@@ -119,6 +161,14 @@ export function App() {
           if (is_down) {
             setLastKeyLabel(web_code);
             recordKeystrokeForWpm();
+            setStats((prev) => ({
+              ...prev,
+              total_keystrokes: total,
+              heatmap: {
+                ...prev.heatmap,
+                [web_code]: (prev.heatmap[web_code] ?? 0) + 1,
+              },
+            }));
           }
         }
       }
@@ -131,11 +181,28 @@ export function App() {
       }
     );
 
+    const unlistenWin = listen<ActiveWindowInfo | null>(
+      'sxmcaps://active-window',
+      (event) => {
+        setActiveWindow(event.payload);
+      }
+    );
+
     return () => {
       unlistenInput.then((fn) => fn());
       unlistenSettings.then((fn) => fn());
+      unlistenWin.then((fn) => fn());
     };
   }, [recordKeystrokeForWpm, showToast]);
+
+  // Refresh full stats snapshot whenever switching to Stats tab
+  useEffect(() => {
+    if (section === 'stats') {
+      invoke<StatsData>('get_stats')
+        .then((s) => setStats(s))
+        .catch(() => {});
+    }
+  }, [section]);
 
   const isGlobalActive =
     inputStatus.has_permission && inputStatus.active_devices.length > 0;
@@ -153,14 +220,30 @@ export function App() {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat || globalActiveRef.current) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') &&
+        !target.dataset.sandbox
+      ) {
+        // Still allow sound when typing in studio/search? Actually let typing test sandbox play always, skip form inputs only if needed
+      }
       const code = e.code || 'KeyA';
       setPressedKeys((prev) => new Set(prev).add(code));
       setLastKeyLabel(code);
-      setTotalKeystrokes((n) => n + 1);
       recordKeystrokeForWpm();
-      invoke('trigger_test_key', { webCode: code, isDown: true }).catch(
-        () => {}
-      );
+      invoke<number>('trigger_test_key', { webCode: code, isDown: true })
+        .then((total) => {
+          setStats((prev) => ({
+            ...prev,
+            total_keystrokes: total,
+            heatmap: {
+              ...prev.heatmap,
+              [code]: (prev.heatmap[code] ?? 0) + 1,
+            },
+          }));
+        })
+        .catch(() => {});
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -285,10 +368,22 @@ export function App() {
     });
     if (isDown) {
       setLastKeyLabel(code);
-      setTotalKeystrokes((n) => n + 1);
       recordKeystrokeForWpm();
     }
-    invoke('trigger_test_key', { webCode: code, isDown }).catch(() => {});
+    invoke<number>('trigger_test_key', { webCode: code, isDown })
+      .then((total) => {
+        if (isDown) {
+          setStats((prev) => ({
+            ...prev,
+            total_keystrokes: total,
+            heatmap: {
+              ...prev.heatmap,
+              [code]: (prev.heatmap[code] ?? 0) + 1,
+            },
+          }));
+        }
+      })
+      .catch(() => {});
   };
 
   const handleTestMouseButton = (button: string, isDown: boolean) => {
@@ -337,6 +432,50 @@ export function App() {
     }
   };
 
+  const handleExportZip = async (packId: string) => {
+    try {
+      const savedPath = await invoke<string | null>('export_soundpack_zip', {
+        packId,
+      });
+      if (savedPath) {
+        showToast(`Paket dışa aktarıldı: ${savedPath}`);
+      }
+    } catch (err) {
+      showToast(`Dışa aktarma hatası: ${err}`, true);
+    }
+  };
+
+  const handleLoadHubCatalog = useCallback(async () => {
+    const list = await invoke<HubPackEntry[]>('get_pack_hub_catalog');
+    setHubCatalog(list);
+  }, []);
+
+  const handleInstallHubPack = async (url: string) => {
+    try {
+      const res = await invoke<SoundpackInfo[]>('install_hub_pack', { url });
+      setSoundpacks(res);
+      showToast('Pack Hub paketi indirildi ve kuruldu.');
+    } catch (err) {
+      showToast(`Kurulum hatası: ${err}`, true);
+    }
+  };
+
+  const handleSaveStudioPack = async (spec: StudioPackSpec) => {
+    try {
+      const created = await invoke<SoundpackInfo>('save_studio_soundpack', {
+        spec,
+      });
+      const list = await invoke<SoundpackInfo[]>('list_soundpacks');
+      setSoundpacks(list);
+      const refreshed = await invoke<InitialStateDto>('get_initial_state');
+      setSettings(refreshed.settings);
+      setSection('keyboard');
+      showToast(`"${created.name}" oluşturuldu ve aktifleştirildi.`);
+    } catch (err) {
+      showToast(`Paket oluşturulamadı: ${err}`, true);
+    }
+  };
+
   const handleEnableUdev = async () => {
     const status = await invoke<InputStatus>('enable_global_input_udev');
     setInputStatus(status);
@@ -376,17 +515,19 @@ export function App() {
     icon: React.ComponentType<{ className?: string }>;
     badge?: string;
   }[] = [
-    { id: 'keyboard', label: 'Klavye Switchleri', icon: Keyboard },
+    { id: 'keyboard', label: 'Switchler', icon: Keyboard },
     {
       id: 'mouse',
-      label: 'Fare & Tıklama',
+      label: 'Fare',
       icon: Mouse,
       badge: settings.mouse_enabled ? 'AÇIK' : 'KAPALI',
     },
-    { id: 'audio', label: 'Akustik & Mikser', icon: Sliders },
+    { id: 'audio', label: 'Akustik DSP', icon: Sliders },
+    { id: 'studio', label: 'Stüdyo', icon: Scissors },
+    { id: 'stats', label: 'İstatistik', icon: BarChart3 },
     {
       id: 'system',
-      label: 'Sistem & Paketler',
+      label: 'Sistem',
       icon: Cpu,
       badge: isGlobalActive ? `${inputStatus.active_devices.length}` : '!',
     },
@@ -395,7 +536,7 @@ export function App() {
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-[#050506] text-zinc-100">
       {/* Top Monochrome Header */}
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#09090b] px-5 py-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#09090b] px-5 py-2.5">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/25 bg-white text-black shadow-[0_2px_0_#71717a]">
             <span className="font-mono text-[11px] font-black tracking-tighter">
@@ -403,9 +544,14 @@ export function App() {
             </span>
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight text-white">
-              sxmcaps
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-bold tracking-tight text-white">
+                sxmcaps
+              </h1>
+              <span className="rounded border border-white/15 bg-white/[0.04] px-1.5 py-0.2 font-mono text-[10px] text-zinc-400">
+                {appVersion}
+              </span>
+            </div>
             <p className="text-[11px] text-zinc-500">
               Monochrome Mechanical Sound Studio
             </p>
@@ -413,7 +559,6 @@ export function App() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Global Listener Status Pill */}
           <button
             type="button"
             onClick={() => setSection('system')}
@@ -436,17 +581,19 @@ export function App() {
               }`}
             />
             {isGlobalActive
-              ? `Global Aktif (${inputStatus.active_devices.length} cihaz)`
-              : 'Yalnızca Pencere İçi'}
+              ? `Global Aktif (${inputStatus.active_devices.length})`
+              : 'Pencere İçi'}
           </button>
 
-          {/* Total keystrokes */}
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-[#0e0e11] px-3 py-1 font-mono text-[11px] text-zinc-300">
+          <button
+            type="button"
+            onClick={() => setSection('stats')}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/10 bg-[#0e0e11] px-3 py-1 font-mono text-[11px] text-zinc-300 hover:border-white/30"
+          >
             <Activity className="h-3.5 w-3.5 text-white" />
-            <span>{totalKeystrokes.toLocaleString('tr-TR')} vuruş</span>
-          </div>
+            <span>{stats.total_keystrokes.toLocaleString('tr-TR')} vuruş</span>
+          </button>
 
-          {/* Master Power / Mute */}
           <button
             type="button"
             onClick={() =>
@@ -491,8 +638,8 @@ export function App() {
           onKeyPress={handleKeyPressVisual}
         />
 
-        {/* Categorized Segmented Navigation Bar */}
-        <nav className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-[#0b0b0e] p-1.5">
+        {/* Categorized 6-Tab Navigation Bar */}
+        <nav className="flex flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-[#0b0b0e] p-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = section === item.id;
@@ -501,17 +648,17 @@ export function App() {
                 key={item.id}
                 type="button"
                 onClick={() => setSection(item.id)}
-                className={`inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                className={`inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
                   active
                     ? 'bg-white text-black shadow-sm'
                     : 'text-zinc-400 hover:bg-white/[0.05] hover:text-white'
                 }`}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
                 {item.badge && (
                   <span
-                    className={`rounded px-1.5 py-0.2 font-mono text-[10px] ${
+                    className={`rounded px-1.5 py-0.2 font-mono text-[9px] ${
                       active
                         ? 'bg-black text-white'
                         : 'border border-white/15 bg-black/50 text-zinc-300'
@@ -525,15 +672,19 @@ export function App() {
           })}
         </nav>
 
-        {/* Categorized Active Panel */}
+        {/* Active Section */}
         <div className="min-h-0 flex-1">
           {section === 'keyboard' && (
             <SoundpackGrid
               soundpacks={soundpacks}
               activeKeyboardPack={settings.active_keyboard_pack}
+              hubCatalog={hubCatalog}
+              onLoadHubCatalog={handleLoadHubCatalog}
+              onInstallHubPack={handleInstallHubPack}
               onSelectKeyboard={handleSelectKeyboardPack}
               onPreview={handlePreviewKeyboardPack}
               onDeleteCustom={handleDeleteCustom}
+              onExportZip={handleExportZip}
             />
           )}
 
@@ -556,11 +707,40 @@ export function App() {
             />
           )}
 
+          {section === 'studio' && (
+            <StudioSection
+              onPickAudio={() =>
+                invoke<AudioInspectResult | null>('pick_studio_audio_file')
+              }
+              onPreviewSlice={(path, startMs, durationMs) =>
+                invoke('preview_studio_slice', { path, startMs, durationMs })
+              }
+              onSavePack={handleSaveStudioPack}
+            />
+          )}
+
+          {section === 'stats' && (
+            <StatsSection
+              stats={stats}
+              onResetStats={() => {
+                invoke<StatsData>('reset_stats')
+                  .then((fresh) => {
+                    setStats(fresh);
+                    showToast('İstatistikler sıfırlandı.');
+                  })
+                  .catch((e) => showToast(`Sıfırlanamadı: ${e}`, true));
+              }}
+            />
+          )}
+
           {section === 'system' && (
             <SystemSection
               settings={settings}
+              soundpacks={soundpacks}
               inputStatus={inputStatus}
+              activeWindow={activeWindow}
               soundpacksDir={soundpacksDir}
+              appVersion={appVersion}
               onUpdateSettings={handleUpdateSettings}
               onEnableUdev={handleEnableUdev}
               onRescanInput={handleRescanInput}
@@ -571,6 +751,7 @@ export function App() {
                   showToast(`Klasör açılamadı: ${e}`, true)
                 )
               }
+              onCheckUpdate={() => invoke<UpdateCheckResult>('check_app_update')}
             />
           )}
         </div>

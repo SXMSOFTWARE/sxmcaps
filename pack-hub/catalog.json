@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "packs": [
+    {
+      "id": "gateron-milky-yellow",
+      "name": "Gateron Milky Yellow",
+      "tag": "Linear",
+      "description": "Sütlü nylon gövdeli, pürüzsüz ve kremsi klasik lineer karakter",
+      "author": "sxmcaps Pack Hub",
+      "device_type": "keyboard",
+      "size_kb": 95.1,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/gateron-milky-yellow.zip"
+    },
+    {
+      "id": "gazzew-boba-u4t",
+      "name": "Gazzew Boba U4T",
+      "tag": "Thocky",
+      "description": "Keskin uzun direkli D-tümsekli sert tactile ve derin tok thock",
+      "author": "sxmcaps Pack Hub",
+      "device_type": "keyboard",
+      "size_kb": 98.5,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/gazzew-boba-u4t.zip"
+    },
+    {
+      "id": "novelkeys-cream",
+      "name": "NovelKeys Cream",
+      "tag": "Linear",
+      "description": "Tam POM gövde ile keskin, net ve karakteristik clack sesi",
+      "author": "sxmcaps Pack Hub",
+      "device_type": "keyboard",
+      "size_kb": 92.8,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/novelkeys-cream.zip"
+    },
+    {
+      "id": "akko-cream-blue",
+      "name": "Akko V3 Cream Blue",
+      "tag": "Tactile",
+      "description": "Hızlı tetiklenen hafif dokunsal tümsek ve temiz parlak clack",
+      "author": "sxmcaps Pack Hub",
+      "device_type": "keyboard",
+      "size_kb": 92.9,
+      "download_url": "https://raw.githubusercontent.com/SXMSOFTWARE/sxmcaps/main/pack-hub/akko-cream-blue.zip"
+    }
+  ]
+}
