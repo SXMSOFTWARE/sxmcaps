@@ -165,6 +165,9 @@ pub fn polling_rate_to_code(hz: u16) -> u8 {
         125 => 0x08,
         250 => 0x04,
         500 => 0x02,
+        2000 => 0x11,
+        4000 => 0x12,
+        8000 => 0x14,
         _ => 0x01,
     }
 }
@@ -378,6 +381,16 @@ pub fn parse_state_report_bd(report: &[u8]) -> Option<ParsedStateBd> {
     if report.len() < 19 || report[0] != REPORT_STATE_READ {
         return None;
     }
+    let has_non_zero_stage = (0..MAX_DPI_STAGES).any(|i| {
+        let off = 7 + i * 2;
+        off + 1 < report.len() && u16::from_le_bytes([report[off], report[off + 1]]) > 0
+    });
+    // Firmware on 04f3:026e USB-C / 2.4G often answers GET_FEATURE(0xBD) with
+    // [0xBD, 0x01, 0x00, 0x00, ...]. Returning None avoids clobbering DPI stages
+    // with 50 DPI / 125 Hz when hardware state-read is unpopulated.
+    if !has_non_zero_stage {
+        return None;
+    }
     let active_stage = if (report[2] as usize) < MAX_DPI_STAGES {
         report[2]
     } else {
@@ -388,22 +401,16 @@ pub fn parse_state_report_bd(report: &[u8]) -> Option<ParsedStateBd> {
     let polling_rate = code_to_polling_rate(report[4]);
     let lod_mm = if report[5] == 2 { 2 } else { 1 };
     let debounce_ms = if report[6] <= 30 { report[6] } else { 8 };
-    let mut stages = Vec::new();
+    let mut stages = Vec::with_capacity(MAX_DPI_STAGES);
+    let defs = default_dpi_stages();
     for i in 0..MAX_DPI_STAGES {
         let off = 7 + i * 2;
-        if off + 1 < report.len() {
-            let raw_step = u16::from_le_bytes([report[off], report[off + 1]]);
-            if raw_step > 0 || i == 0 {
-                stages.push(decode_dpi_step(raw_step));
-            }
+        let raw_step = u16::from_le_bytes([report[off], report[off + 1]]);
+        if raw_step > 0 {
+            stages.push(decode_dpi_step(raw_step));
+        } else {
+            stages.push(defs[i]);
         }
-    }
-    if stages.is_empty() {
-        stages = default_dpi_stages();
-    }
-    while stages.len() < MAX_DPI_STAGES {
-        let idx = stages.len();
-        stages.push(default_dpi_stages()[idx]);
     }
     let stage_count = (mask.count_ones() as u8).clamp(1, MAX_DPI_STAGES as u8);
     Some(ParsedStateBd {
@@ -468,10 +475,13 @@ impl Default for PersistedZ1Profile {
 
 pub struct FurylevelZ1Driver {
     info: HardwareDeviceInfo,
-    hid_path: String,
+    feature_path: String,
+    input_path: Option<String>,
     link: ConnectionLink,
     seq: AtomicU8,
     io_lock: Mutex<PersistedZ1Profile>,
+    feature_dev: Mutex<Option<HidDevice>>,
+    input_dev: Mutex<Option<HidDevice>>,
 }
 
 impl FurylevelZ1Driver {
@@ -486,6 +496,20 @@ impl FurylevelZ1Driver {
             .ok()
             .and_then(|s| serde_json::from_str::<PersistedZ1Profile>(&s).ok())
             .unwrap_or_default();
+        let defs = default_dpi_stages();
+        while p.dpi_stages.len() < MAX_DPI_STAGES {
+            p.dpi_stages.push(defs[p.dpi_stages.len()]);
+        }
+        // Auto-heal the v0.4.1 empty-0xBD artifact where stage 0 became 50 DPI.
+        if p.dpi_stages.first() == Some(&50) {
+            p.dpi_stages[0] = defs[0];
+        }
+        p.active_stage = p.active_stage.min((MAX_DPI_STAGES - 1) as u8);
+        if p.stage_enable_mask & 0x3f == 0 {
+            p.stage_enable_mask = 0x0f;
+        }
+        p.stage_enable_mask |= 1u8 << p.active_stage;
+        p.stage_count = ((p.stage_enable_mask & 0x3f).count_ones() as u8).clamp(1, MAX_DPI_STAGES as u8);
         if *link == ConnectionLink::Wired {
             p.is_charging = true;
         }
@@ -510,11 +534,20 @@ impl FurylevelZ1Driver {
 
         let mut out = Vec::new();
         for ((vid, pid), ifaces) in grouped {
-            // Vendor configuration interface is interface 1 (usage_page 0xff00).
+            // On Windows hidclass.sys splits Interface 1 into separate TLCs:
+            // prioritize vendor Feature TLC (0xff00), never Keyboard (0x0001) or Consumer (0x000c).
             let vendor_iface = ifaces
                 .iter()
                 .copied()
-                .find(|d| d.interface_number() == 1 || d.usage_page() == 0xff00)
+                .find(|d| d.usage_page() == 0xff00)
+                .or_else(|| {
+                    ifaces.iter().copied().find(|d| {
+                        d.interface_number() == 1
+                            && d.usage_page() != 0x0001
+                            && d.usage_page() != 0x000c
+                    })
+                })
+                .or_else(|| ifaces.iter().copied().find(|d| d.interface_number() == 1))
                 .unwrap_or(ifaces[0]);
             let path = vendor_iface.path().to_string_lossy().into_owned();
             let cpath = CString::new(path.as_str()).ok();
@@ -597,18 +630,33 @@ impl FurylevelZ1Driver {
     }
 
     pub fn open_from_info(info: HardwareDeviceInfo) -> Result<Self, String> {
-        let hid_path = info
+        let feature_path = info
             .hid_path
             .clone()
             .ok_or_else(|| "Furylevel Z1 HID path missing".to_string())?;
+        // On Windows, Input Report 0x04 lives on its own TLC (usage_page 0x000a) separate from
+        // the Feature TLC (0xff00). On Linux both live on /dev/hidraw1, so input_path stays None.
+        let input_path = HidApi::new().ok().and_then(|api| {
+            api.device_list()
+                .find(|d| {
+                    d.vendor_id() == info.vendor_id
+                        && d.product_id() == info.product_id
+                        && d.usage_page() == 0x000a
+                })
+                .map(|d| d.path().to_string_lossy().into_owned())
+                .filter(|p| p != &feature_path)
+        });
         let link = info.link.clone();
         let profile = Self::load_profile(&link);
         Ok(Self {
             info,
-            hid_path,
+            feature_path,
+            input_path,
             link,
             seq: AtomicU8::new(1),
             io_lock: Mutex::new(profile),
+            feature_dev: Mutex::new(None),
+            input_dev: Mutex::new(None),
         })
     }
 
@@ -616,15 +664,81 @@ impl FurylevelZ1Driver {
         self.seq.fetch_add(1, Ordering::Relaxed)
     }
 
-    fn open_hid(&self) -> Result<HidDevice, String> {
+    fn open_path_raw(path: &str) -> Result<HidDevice, String> {
         let api = HidApi::new().map_err(|e| format!("HID init failed: {e}"))?;
-        let cpath = CString::new(self.hid_path.as_str()).map_err(|e| e.to_string())?;
+        let cpath = CString::new(path).map_err(|e| e.to_string())?;
         api.open_path(&cpath).map_err(|e| {
-            format!(
-                "Furylevel Z1 HID açma hatası ({}): {e}. udev kurallarını yükleyin.",
-                self.hid_path
-            )
+            format!("Furylevel Z1 HID açma hatası ({path}): {e}. udev kurallarını yükleyin.")
         })
+    }
+
+    fn with_feature_dev<F, R>(&self, f: F) -> Result<R, String>
+    where
+        F: FnOnce(&HidDevice) -> Result<R, String>,
+    {
+        let mut guard = self
+            .feature_dev
+            .lock()
+            .map_err(|_| "Furylevel feature handle mutex poisoned".to_string())?;
+        if guard.is_none() {
+            *guard = Some(Self::open_path_raw(&self.feature_path)?);
+        }
+        let res = f(guard.as_ref().expect("just populated"));
+        if res.is_err() {
+            // Force clean re-open if device was replugged or handle became stale.
+            *guard = None;
+        }
+        res
+    }
+
+    fn drain_input_reports(&self, prof: &mut PersistedZ1Profile) -> bool {
+        let mut saw_change = false;
+        let mut read_loop = |dev: &HidDevice| -> Result<(), hidapi::HidError> {
+            let mut buf = [0u8; PACKET_FEATURE_LEN];
+            for _ in 0..8 {
+                match dev.read_timeout(&mut buf, 0) {
+                    Ok(n) if n >= 7 => {
+                        if let Some(inp) = parse_input_status_report(&buf[..n]) {
+                            prof.active_stage = inp.active_stage.min((MAX_DPI_STAGES - 1) as u8);
+                            prof.stage_enable_mask |= 1u8 << prof.active_stage;
+                            prof.stage_count = ((prof.stage_enable_mask & 0x3f).count_ones() as u8)
+                                .clamp(1, MAX_DPI_STAGES as u8);
+                            prof.polling_rate = inp.polling_rate;
+                            prof.lod_mm = inp.lod_mm;
+                            prof.battery_pct = inp.battery_pct;
+                            prof.is_charging = inp.is_charging;
+                            saw_change = true;
+                        }
+                    }
+                    Ok(_) => break,
+                    Err(e) => return Err(e),
+                }
+            }
+            Ok(())
+        };
+
+        if let Some(ref in_path) = self.input_path {
+            if let Ok(mut guard) = self.input_dev.lock() {
+                if guard.is_none() {
+                    *guard = Self::open_path_raw(in_path).ok();
+                }
+                if let Some(dev) = guard.as_ref() {
+                    if read_loop(dev).is_err() {
+                        *guard = None;
+                    }
+                }
+            }
+        } else if let Ok(mut guard) = self.feature_dev.lock() {
+            if guard.is_none() {
+                *guard = Self::open_path_raw(&self.feature_path).ok();
+            }
+            if let Some(dev) = guard.as_ref() {
+                if read_loop(dev).is_err() {
+                    *guard = None;
+                }
+            }
+        }
+        saw_change
     }
 
     fn send_feature_command(&self, dev: &HidDevice, packet: &[u8; PACKET_FEATURE_LEN]) -> Result<(), String> {
@@ -685,23 +799,6 @@ impl FurylevelZ1Driver {
                 prof.lod_mm = bd.lod_mm;
                 prof.debounce_ms = bd.debounce_ms;
                 prof.dpi_stages = bd.dpi_stages;
-            }
-        }
-
-        // Drain any non-blocking Input Report 0x04 notifications (physical DPI press / battery / charging)
-        let mut buf = [0u8; PACKET_FEATURE_LEN];
-        for _ in 0..8 {
-            match dev.read_timeout(&mut buf, 0) {
-                Ok(n) if n >= 7 => {
-                    if let Some(inp) = parse_input_status_report(&buf[..n]) {
-                        prof.active_stage = inp.active_stage;
-                        prof.polling_rate = inp.polling_rate;
-                        prof.lod_mm = inp.lod_mm;
-                        prof.battery_pct = inp.battery_pct;
-                        prof.is_charging = inp.is_charging;
-                    }
-                }
-                _ => break,
             }
         }
 
@@ -795,25 +892,7 @@ impl PeripheralDriver for FurylevelZ1Driver {
         let Ok(mut prof) = self.io_lock.try_lock() else {
             return Ok(None);
         };
-        let dev = self.open_hid()?;
-        let mut saw_change = false;
-        let mut buf = [0u8; PACKET_FEATURE_LEN];
-        for _ in 0..8 {
-            match dev.read_timeout(&mut buf, 0) {
-                Ok(n) if n >= 7 => {
-                    if let Some(inp) = parse_input_status_report(&buf[..n]) {
-                        prof.active_stage = inp.active_stage;
-                        prof.polling_rate = inp.polling_rate;
-                        prof.lod_mm = inp.lod_mm;
-                        prof.battery_pct = inp.battery_pct;
-                        prof.is_charging = inp.is_charging;
-                        saw_change = true;
-                    }
-                }
-                _ => break,
-            }
-        }
-        if !saw_change {
+        if !self.drain_input_reports(&mut prof) {
             return Ok(None);
         }
         Self::save_profile(&prof);
@@ -838,8 +917,9 @@ impl PeripheralDriver for FurylevelZ1Driver {
                 self.info.online,
             )));
         }
-        let dev = self.open_hid()?;
-        let (fw, max_rate, online) = self.sync_from_hardware_locked(&dev, &mut prof);
+        let (fw, max_rate, online) =
+            self.with_feature_dev(|dev| Ok(self.sync_from_hardware_locked(dev, &mut prof)))?;
+        self.drain_input_reports(&mut prof);
         Self::save_profile(&prof);
         Ok(Some(self.build_mouse_dto(&prof, fw, max_rate, online)))
     }
@@ -852,7 +932,7 @@ impl PeripheralDriver for FurylevelZ1Driver {
             .io_lock
             .lock()
             .map_err(|_| "Furylevel mutex poisoned".to_string())?;
-        let dev = self.open_hid()?;
+        self.with_feature_dev(|dev| {
 
         let mut send_dpi = false;
         if let Some(stages) = cfg.dpi_stages {
@@ -912,7 +992,7 @@ impl PeripheralDriver for FurylevelZ1Driver {
 
         if let Some(hz) = cfg.polling_rate {
             prof.polling_rate = match hz {
-                125 | 250 | 500 | 1000 => hz,
+                125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 => hz,
                 _ => 1000,
             };
             let pkt = build_feature_polling_packet(self.next_seq(), prof.polling_rate);
@@ -992,9 +1072,12 @@ impl PeripheralDriver for FurylevelZ1Driver {
             if btns.len() >= 6 {
                 prof.button_mappings = btns.into_iter().take(6).collect();
                 let pkt = build_feature_key_mapping_packet(self.next_seq(), &prof.button_mappings);
-                self.send_feature_command(&dev, &pkt)?;
+                self.send_feature_command(dev, &pkt)?;
             }
         }
+
+        Ok(())
+        })?;
 
         Self::save_profile(&prof);
         Ok(Some(self.build_mouse_dto(
@@ -1013,9 +1096,8 @@ impl PeripheralDriver for FurylevelZ1Driver {
             .io_lock
             .lock()
             .map_err(|_| "Furylevel mutex poisoned".to_string())?;
-        let dev = self.open_hid()?;
         let pkt = build_feature_packet(cmd::FACTORY_RESET, self.next_seq(), 0x01, &[0xff]);
-        self.send_feature_command(&dev, &pkt)?;
+        self.with_feature_dev(|dev| self.send_feature_command(dev, &pkt))?;
         *prof = PersistedZ1Profile::default();
         if self.link == ConnectionLink::Wired {
             prof.is_charging = true;
@@ -1147,5 +1229,14 @@ mod tests {
         assert_eq!(state.dpi_stages[0], 400);
         assert_eq!(state.dpi_stages[1], 800);
         assert_eq!(state.debounce_ms, 6);
+    }
+
+    #[test]
+    fn empty_zero_bd_report_returns_none_instead_of_corrupting_dpi_to_50() {
+        // Real 04f3:026e USB-C / 2.4G firmware answers GET_FEATURE(0xBD) with [0xBD, 0x01, 0x00...]
+        let mut empty_bd = [0u8; PACKET_STATE_LEN];
+        empty_bd[0] = REPORT_STATE_READ;
+        empty_bd[1] = 0x01;
+        assert!(parse_state_report_bd(&empty_bd).is_none());
     }
 }

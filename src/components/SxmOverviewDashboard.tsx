@@ -4,6 +4,7 @@ import {
   DeviceHardwareState,
   HardwareDeviceInfo,
   LightingPreviewFrame,
+  MouseHardwareState,
   SoundpackInfo,
   StatsData,
   SxLightingPreset,
@@ -33,6 +34,7 @@ interface SxmOverviewDashboardProps {
   devices: HardwareDeviceInfo[];
   selectedDevice: HardwareDeviceInfo | null;
   hwState: DeviceHardwareState | null;
+  mouseState?: MouseHardwareState | null;
   onSelectDevice: (id: string) => void;
   settings: AppSettings;
   soundpacks: SoundpackInfo[];
@@ -59,6 +61,7 @@ export const SxmOverviewDashboard: React.FC<SxmOverviewDashboardProps> = ({
   devices,
   selectedDevice,
   hwState,
+  mouseState = null,
   onSelectDevice,
   settings,
   soundpacks,
@@ -223,6 +226,7 @@ export const SxmOverviewDashboard: React.FC<SxmOverviewDashboardProps> = ({
           ) : selectedDevice ? (
             <DeviceSpecificNoticeCard
               device={selectedDevice}
+              mouseState={mouseState}
               settings={settings}
               soundpacks={soundpacks}
               audioDevices={audioDevices}

@@ -2,12 +2,16 @@
 
 Monochrome desktop peripheral & acoustic suite combining hardware-aware HID control (**SxBoards**), a 24-effect procedural lighting compositor (**SxLighting**), opt-in kernel-level input transforms (**SxPerformance**), and real-time mechanical switch / mouse sound synthesis (`Rust`, `Tauri v2`, `hidapi`, `CPAL/Rodio`, `evdev` / Win32 / `CGEventTap`).
 
-## What's New in `v0.4.1`
+## What's New in `v0.4.2`
+
+- **Windows Focused Typing Sound Fix**: Moved `WH_KEYBOARD_LL` / `WH_MOUSE_LL` state tracking & audio dispatch onto a lock-free background worker thread (`SyncSender<WinRawEvent>`) with `GetModuleHandleW(null)` so hooks return in `<1µs`, armed in-app sandbox fallback on Win32, and added 25 ms backend event deduplication (`accept_key_trigger`).
+- **Furylevel Z1 DPI & Live Hardware Tracking Fix**: Treated all-zero `GET_FEATURE(0xBD)` responses as unpopulated instead of clobbering DPI to `50 DPI` / `125 Hz`, separated Windows HID TLC paths (`0xff00` Feature vs `0x000a` live `0x04` Input) with persistent handles so live button presses aren't dropped between polls, and displayed real-time Active DPI badges across overview and mouse panels.
+- **RAM Optimization, Eco Sound-Only Mode & Tray Hibernation**: Halved decoded soundpack RAM by storing shrink-fitted `Arc<[i16]>` PCM slices, eliminated per-poll `HidApi::new()` churn across `AulaF75Driver` and `FurylevelZ1Driver`, gated UI/lighting/HID polling on window visibility, added one-click **Sound-Only Mode (Eco)**, and enabled WebView hibernation on tray minimize (freeing WebView2 / WebKitGTK RAM until reopened).
+
+## Previous Highlights (`v0.4.1` / `v0.4.0`)
 
 - **SxLighting Hardware Streaming Fix (`AULA F75`)**: Added `prepare_realtime_stream()` switching wired AULA F75 firmware into Per-Key Custom mode (`block[9]=0x01`, `block[10]=0x15`, `block[59]=0x47`, `400ms` settle wait), cached stream HID handle for zero-starvation frame delivery, automatic keyboard fallback target resolution, and defaulted Hardware Stream (`LED'lere Aktar`) ON when launching the compositor.
 - **Native Furylevel Z1 Mouse Driver (`04f3:026e` Wired / `04f3:026f` 2.4G / `04f3:026d` 4K)**: Full HID protocol support (`0xBC` wake, `0x05` status/battery, `0xBD` flash state, `0x04` live input events, and `0x01..0x0F` config commands) with PAW3395 DPI stages (`50–26,000`), Polling Rate (`125–4000 Hz`), `1/2 mm` LOD, Debounce (`0–30 ms`), Angle Snap, Motion Sync, Ripple Control, Sleep & LED modes, and 6-button remapping.
-
-## Previous Highlights (`v0.4.0`)
 
 - **Monochrome Black & White Bento Studio UI**: Redesigned **`SxmCaps`** dashboard featuring a `#050506` obsidian canvas, `#111114` hairline Bento cards, white pill active controls, unified `Overview` Control Hub, and truthful hardware classification (`Keyboard`, `Mouse`, `Headset`).
 - **Live FN Hardware Sync (`AULA F75`)**: Polls USB/2.4G firmware state via `spawn_hardware_watcher` (`sxmcaps://hardware-state`) so physical `FN` key combinations and rotary knob adjustments update the UI in real time.

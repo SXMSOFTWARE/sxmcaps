@@ -163,6 +163,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   app_profiles: [],
   autostart: false,
   language: 'auto',
+  sound_only_mode: false,
+  hibernate_on_tray: true,
 };
 
 const EMPTY_STATS: StatsData = {
@@ -216,6 +218,10 @@ function normalizeError(err: unknown): string {
 
 export function App() {
   const [section, setSection] = useState<MainSection>('overview');
+  const activeSectionRef = useRef<MainSection>('overview');
+  useEffect(() => {
+    activeSectionRef.current = section;
+  }, [section]);
   const [soundTab, setSoundTab] = useState<SoundSubTab>('switches');
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -227,7 +233,7 @@ export function App() {
     null
   );
   const [soundpacksDir, setSoundpacksDir] = useState('');
-  const [appVersion, setAppVersion] = useState('v0.4.1');
+  const [appVersion, setAppVersion] = useState('v0.4.2');
   const [inputStatus, setInputStatus] = useState<InputStatus>({
     has_permission: true,
     active_devices: [],
@@ -306,7 +312,7 @@ export function App() {
     );
     const chars = keyTimestampsRef.current.length;
     const nextWpm = chars > 1 ? Math.round((chars / 5) * 10) : 0;
-    setWpm(nextWpm);
+    setWpm((prev) => (prev === nextWpm ? prev : nextWpm));
     if (nextWpm > lastReportedPeakRef.current && nextWpm > 12) {
       lastReportedPeakRef.current = nextWpm;
       invoke('report_wpm', { wpm: nextWpm }).catch(() => {});
@@ -486,14 +492,21 @@ export function App() {
           if (ev.is_down) {
             setLastKeyLabel(ev.web_code);
             recordWpmTick();
-            setStats((prev) => ({
-              ...prev,
-              total_keystrokes: ev.total_keystrokes,
-              heatmap: {
-                ...prev.heatmap,
-                [ev.web_code]: (prev.heatmap[ev.web_code] ?? 0) + 1,
-              },
-            }));
+            const needHeatmap =
+              activeSectionRef.current === 'overview' ||
+              activeSectionRef.current === 'stats';
+            setStats((prev) =>
+              needHeatmap
+                ? {
+                    ...prev,
+                    total_keystrokes: ev.total_keystrokes,
+                    heatmap: {
+                      ...prev.heatmap,
+                      [ev.web_code]: (prev.heatmap[ev.web_code] ?? 0) + 1,
+                    },
+                  }
+                : { ...prev, total_keystrokes: ev.total_keystrokes }
+            );
           }
         }
       }
@@ -558,33 +571,39 @@ export function App() {
     return () => clearInterval(poll);
   }, [section, sxPerfConfig.enabled]);
 
-  // Decay WPM & refresh stats on stats tab
+  // Decay WPM & refresh stats on overview/stats tabs
   useEffect(() => {
     const timer = window.setInterval(() => {
       const now = Date.now();
       const recent = keyTimestampsRef.current.filter((ts) => now - ts < 6000);
       keyTimestampsRef.current = recent;
-      setWpm(recent.length > 1 ? Math.round((recent.length / 5) * 10) : 0);
+      const next = recent.length > 1 ? Math.round((recent.length / 5) * 10) : 0;
+      setWpm((prev) => (prev === next ? prev : next));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    if (section === 'stats') {
+    if (section === 'stats' || section === 'overview') {
       invoke<StatsData>('get_stats')
         .then((s) => setStats(s))
         .catch(() => {});
     }
   }, [section]);
 
-  // Global key/mouse fallback listener when focused inside app
+  // Global key/mouse fallback listener when focused inside app (always armed on win32
+  // so typing inside focused WebView2 plays reliably even if WH_KEYBOARD_LL yields to focus)
   useEffect(() => {
+    const isWin32 = inputStatus.session_type === 'win32';
     const hasGlobal =
       inputStatus.has_permission && inputStatus.active_devices.length > 0;
-    if (hasGlobal) return;
+    if (hasGlobal && !isWin32) return;
 
     const downSet = new Set<string>();
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLElement && e.target.dataset.sxmSandbox === 'true') {
+        return;
+      }
       if (
         e.repeat ||
         e.target instanceof HTMLInputElement ||
@@ -599,18 +618,28 @@ export function App() {
       setPressedKeys((prev) => new Set(prev).add(code));
       setLastKeyLabel(code);
       recordWpmTick();
+      const needHeatmap =
+        activeSectionRef.current === 'overview' ||
+        activeSectionRef.current === 'stats';
       invoke<number>('trigger_test_key', { webCode: code, isDown: true })
         .then((total) => {
-          setStats((prev) => ({
-            ...prev,
-            total_keystrokes: total,
-            heatmap: { ...prev.heatmap, [code]: (prev.heatmap[code] ?? 0) + 1 },
-          }));
+          setStats((prev) =>
+            needHeatmap
+              ? {
+                  ...prev,
+                  total_keystrokes: total,
+                  heatmap: { ...prev.heatmap, [code]: (prev.heatmap[code] ?? 0) + 1 },
+                }
+              : { ...prev, total_keystrokes: total }
+          );
         })
         .catch(() => {});
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLElement && e.target.dataset.sxmSandbox === 'true') {
+        return;
+      }
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
@@ -1529,8 +1558,27 @@ export function App() {
               )}
             </div>
 
-            {/* Preset Bar */}
+            {/* Preset & Eco Mode Bar */}
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  updateSettings({
+                    ...settings,
+                    sound_only_mode: !settings.sound_only_mode,
+                  })
+                }
+                title={t.system.ecoModeDesc}
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase transition ${
+                  settings.sound_only_mode
+                    ? 'border-white bg-white text-black'
+                    : 'border-white/15 bg-[#111114] text-zinc-300 hover:border-white/35 hover:text-white'
+                }`}
+              >
+                <Zap className="h-3 w-3" />
+                {t.system.ecoShort}
+              </button>
+
               <div className="flex items-center gap-1 rounded-full border border-white/12 bg-[#111114] px-3 py-1">
                 <select
                   value={activePreset?.id ?? ''}
@@ -1604,11 +1652,104 @@ export function App() {
 
           {/* Main Section Canvas */}
           <main className="sxb-stage-bg min-h-0 flex-1 overflow-hidden p-4">
+            {settings.sound_only_mode ? (
+              <div className="flex h-full items-center justify-center">
+                <div className="sxm-card w-full max-w-xl space-y-5 p-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-black">
+                        <Volume2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-base font-extrabold tracking-tight text-white">
+                            {t.system.ecoMode}
+                          </h2>
+                          <span className="rounded-full border border-emerald-400/35 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300 uppercase">
+                            ECO · LOW RAM
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-zinc-400">
+                          {t.system.ecoModeDesc}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSettings({ ...settings, sound_only_mode: false })
+                      }
+                      className="cursor-pointer rounded-full bg-white px-4 py-2 text-xs font-extrabold tracking-wide text-black transition hover:bg-zinc-200"
+                    >
+                      {t.system.wakeFullUi}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="sxm-well space-y-1.5 p-3.5">
+                      <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">
+                        {t.nav.keyboard}
+                      </span>
+                      <select
+                        value={settings.active_keyboard_pack}
+                        onChange={(e) => handleSelectKeyboardPack(e.target.value)}
+                        className="w-full cursor-pointer rounded-lg border border-white/10 bg-[#0b0b0d] px-2.5 py-1.5 text-xs font-semibold text-white outline-none"
+                      >
+                        {soundpacks
+                          .filter((p) => p.device_type !== 'mouse')
+                          .map((p) => (
+                            <option key={p.id} value={p.id} className="bg-[#111114]">
+                              {p.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div className="sxm-well space-y-1.5 p-3.5">
+                      <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">
+                        {t.nav.sound} ({Math.round(settings.keyboard_volume * 100)}%)
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1.5}
+                        step={0.01}
+                        value={settings.keyboard_volume}
+                        onChange={(e) =>
+                          updateSettings({
+                            ...settings,
+                            keyboard_volume: parseFloat(e.target.value),
+                          })
+                        }
+                        className="sxm-slider mt-2 w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sxm-well flex items-center gap-2.5 px-3.5 py-2.5">
+                    <Keyboard className="h-4 w-4 shrink-0 text-zinc-400" />
+                    <input
+                      type="text"
+                      data-sxm-sandbox="true"
+                      onKeyDown={(e) => {
+                        if (!e.repeat) handleTestKey(e.code, true);
+                      }}
+                      onKeyUp={(e) => handleTestKey(e.code, false)}
+                      placeholder={t.kb.placeholder(t.kb.prompts[0])}
+                      className="w-full bg-transparent text-xs text-white placeholder-zinc-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
             {section === 'overview' && (
               <SxmOverviewDashboard
                 devices={devices}
                 selectedDevice={activeDevice}
                 hwState={hwState}
+                mouseState={mouseState}
                 onSelectDevice={handleSelectDevice}
                 settings={settings}
                 soundpacks={soundpacks}
@@ -1738,6 +1879,7 @@ export function App() {
                   activeDevice.device_kind !== 'keyboard' ? (
                     <DeviceSpecificNoticeCard
                       device={activeDevice}
+                      mouseState={mouseState}
                       settings={settings}
                       soundpacks={soundpacks}
                       audioDevices={audioDevices}
@@ -1911,6 +2053,8 @@ export function App() {
                   invoke<UpdateCheckResult>('check_app_update')
                 }
               />
+            )}
+              </>
             )}
           </main>
         </div>

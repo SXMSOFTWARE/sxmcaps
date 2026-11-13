@@ -497,8 +497,17 @@ export const AulaF75BoardStage: React.FC<AulaF75BoardStageProps> = ({
           <Keyboard className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
           <input
             type="text"
+            data-sxm-sandbox="true"
             value={sandboxText}
             onChange={(e) => setSandboxText(e.target.value)}
+            onKeyDown={(e) => {
+              if (!e.repeat) {
+                onSoundKeyPress?.(e.code, true);
+              }
+            }}
+            onKeyUp={(e) => {
+              onSoundKeyPress?.(e.code, false);
+            }}
             placeholder={t.kb.placeholder(activePrompt)}
             className="w-full bg-transparent text-xs text-white placeholder-zinc-500 outline-none"
           />

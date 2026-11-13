@@ -55,7 +55,7 @@ pub fn inspect_audio_file(path: &Path) -> Result<AudioInspectResult, String> {
         let end = ((i + 1) * chunk_size).min(clip.samples.len());
         let peak = clip.samples[start..end]
             .iter()
-            .fold(0.0f32, |acc, &s| acc.max(s.abs()));
+            .fold(0.0f32, |acc, &s| acc.max((s as f32 / 32768.0).abs()));
         waveform.push(peak.clamp(0.0, 1.0));
     }
 
@@ -135,10 +135,8 @@ fn write_mono_wav(path: &Path, clip: &AudioClip) -> Result<(), String> {
     file.write_all(&data_bytes.to_le_bytes()).map_err(|e| e.to_string())?;
 
     let mut pcm_bytes = Vec::with_capacity(clip.samples.len() * 2);
-    for &s in &clip.samples {
-        let clamped = s.clamp(-1.0, 1.0);
-        let i = (clamped * 32767.0) as i16;
-        pcm_bytes.extend_from_slice(&i.to_le_bytes());
+    for &s in clip.samples.iter() {
+        pcm_bytes.extend_from_slice(&s.to_le_bytes());
     }
     file.write_all(&pcm_bytes).map_err(|e| e.to_string())?;
     Ok(())
@@ -272,7 +270,11 @@ mod tests {
 
         let wav_path = pack_dir.join("test_key.wav");
         let clip = AudioClip {
-            samples: (0..4800).map(|i| (i as f32 * 0.08).sin() * 0.5).collect(),
+            samples: std::sync::Arc::from(
+                (0..4800)
+                    .map(|i| (((i as f32 * 0.08).sin() * 0.5) * 32767.0) as i16)
+                    .collect::<Vec<_>>(),
+            ),
             sample_rate: 48_000,
         };
         write_mono_wav(&wav_path, &clip).expect("wav write should succeed");

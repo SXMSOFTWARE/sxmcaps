@@ -41,6 +41,9 @@ pub struct AppSettings {
     pub autostart: bool,
     // v0.2.1 Localization ("auto" | "tr" | "en")
     pub language: String,
+    // v0.4.2 Performance & RAM Optimization
+    pub sound_only_mode: bool,
+    pub hibernate_on_tray: bool,
 }
 
 impl Default for AppSettings {
@@ -69,6 +72,8 @@ impl Default for AppSettings {
             app_profiles: Vec::new(),
             autostart: false,
             language: "auto".to_string(),
+            sound_only_mode: false,
+            hibernate_on_tray: true,
         }
     }
 }

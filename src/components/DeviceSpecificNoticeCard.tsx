@@ -1,10 +1,16 @@
 import React from 'react';
-import { AppSettings, HardwareDeviceInfo, SoundpackInfo } from '../types';
+import {
+  AppSettings,
+  HardwareDeviceInfo,
+  MouseHardwareState,
+  SoundpackInfo,
+} from '../types';
 import { useI18n } from '../i18n';
 import { Cpu, Headphones, Mouse, ShieldAlert, Sliders, Volume2 } from 'lucide-react';
 
 interface DeviceSpecificNoticeCardProps {
   device: HardwareDeviceInfo;
+  mouseState?: MouseHardwareState | null;
   settings: AppSettings;
   soundpacks: SoundpackInfo[];
   audioDevices: string[];
@@ -16,6 +22,7 @@ interface DeviceSpecificNoticeCardProps {
 
 export const DeviceSpecificNoticeCard: React.FC<DeviceSpecificNoticeCardProps> = ({
   device,
+  mouseState = null,
   settings,
   soundpacks,
   audioDevices,
@@ -80,13 +87,23 @@ export const DeviceSpecificNoticeCard: React.FC<DeviceSpecificNoticeCardProps> =
                 <p className="text-[11px] text-zinc-500">{t.mouse.subtitle}</p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('mouse')}
-              className="cursor-pointer rounded-full border border-white/15 bg-white/8 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-white hover:text-black"
-            >
-              {t.mouse.packsTitle} →
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {mouseState && (
+                <span className="rounded-full bg-white px-2.5 py-1 font-mono text-[10px] font-extrabold text-black tabular-nums">
+                  {mouseState.dpi_stages[mouseState.active_stage] ??
+                    mouseState.dpi_stages[0] ??
+                    800}{' '}
+                  DPI · {mouseState.polling_rate} Hz
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => onNavigateTab('mouse')}
+                className="cursor-pointer rounded-full border border-white/15 bg-white/8 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-white hover:text-black"
+              >
+                {t.mouse.packsTitle} →
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-12">

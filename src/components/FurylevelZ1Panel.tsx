@@ -159,6 +159,18 @@ export const FurylevelZ1Panel: React.FC<FurylevelZ1PanelProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           {mouseState && (
             <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0b0b0d] px-3.5 py-2">
+              <div>
+                <div className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">
+                  {md.activeDpi}
+                </div>
+                <div className="font-mono text-xs font-extrabold text-white tabular-nums">
+                  {mouseState.dpi_stages[mouseState.active_stage] ??
+                    mouseState.dpi_stages[0] ??
+                    800}{' '}
+                  DPI · {mouseState.polling_rate} Hz
+                </div>
+              </div>
+              <div className="h-6 w-px bg-white/10" />
               {mouseState.is_charging ? (
                 <BatteryCharging className="h-4 w-4 text-emerald-400" />
               ) : (

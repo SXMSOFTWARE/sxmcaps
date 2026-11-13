@@ -411,38 +411,72 @@ export const SystemSection: React.FC<SystemSectionProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border border-white/8 bg-[#0b0b0d] p-2.5">
-              <div>
-                <div className="text-[11px] font-medium text-white">
-                  {t.system.tray}
-                </div>
-                <div className="text-[10px] text-zinc-500">
-                  {t.system.trayDesc}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  onUpdateSettings({
-                    ...settings,
-                    minimize_to_tray: !settings.minimize_to_tray,
-                  })
-                }
-                className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full border transition ${
-                  settings.minimize_to_tray
-                    ? 'border-white bg-white text-black shadow-none'
-                    : 'border-white/12 bg-[#1c1c21]'
-                }`}
+            {(
+              [
+                {
+                  key: 'minimize_to_tray',
+                  title: t.system.tray,
+                  desc: t.system.trayDesc,
+                  active: settings.minimize_to_tray,
+                  toggle: () =>
+                    onUpdateSettings({
+                      ...settings,
+                      minimize_to_tray: !settings.minimize_to_tray,
+                    }),
+                },
+                {
+                  key: 'hibernate_on_tray',
+                  title: t.system.hibernateTray,
+                  desc: t.system.hibernateTrayDesc,
+                  active: settings.hibernate_on_tray,
+                  toggle: () =>
+                    onUpdateSettings({
+                      ...settings,
+                      hibernate_on_tray: !settings.hibernate_on_tray,
+                    }),
+                },
+                {
+                  key: 'sound_only_mode',
+                  title: t.system.ecoMode,
+                  desc: t.system.ecoModeDesc,
+                  active: settings.sound_only_mode,
+                  toggle: () =>
+                    onUpdateSettings({
+                      ...settings,
+                      sound_only_mode: !settings.sound_only_mode,
+                    }),
+                },
+              ] as const
+            ).map((opt) => (
+              <div
+                key={opt.key}
+                className="flex items-center justify-between rounded-xl border border-white/8 bg-[#0b0b0d] p-2.5"
               >
-                <span
-                  className={`block h-3.5 w-3.5 rounded-full transition-transform ${
-                    settings.minimize_to_tray
-                      ? 'translate-x-4.5 bg-black'
-                      : 'translate-x-0.5 bg-zinc-400'
+                <div>
+                  <div className="text-[11px] font-medium text-white">
+                    {opt.title}
+                  </div>
+                  <div className="text-[10px] text-zinc-500">{opt.desc}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={opt.toggle}
+                  className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full border transition ${
+                    opt.active
+                      ? 'border-white bg-white text-black shadow-none'
+                      : 'border-white/12 bg-[#1c1c21]'
                   }`}
-                />
-              </button>
-            </div>
+                >
+                  <span
+                    className={`block h-3.5 w-3.5 rounded-full transition-transform ${
+                      opt.active
+                        ? 'translate-x-4.5 bg-black'
+                        : 'translate-x-0.5 bg-zinc-400'
+                    }`}
+                  />
+                </button>
+              </div>
+            ))}
           </div>
         </div>
 

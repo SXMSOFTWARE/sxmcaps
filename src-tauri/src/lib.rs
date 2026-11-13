@@ -34,10 +34,11 @@ use soundpack::{
     load_soundpack, LoadedSoundpack, SoundpackInfo,
 };
 use stats::{StatsData, StatsManager};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use studio::{
     export_pack_zip, inspect_audio_file, preview_audio_slice, save_studio_pack,
     AudioInspectResult, StudioPackSpec,
@@ -54,7 +55,7 @@ use sxlighting::{
 use sxperformance::{SxPerformanceConfig, SxPerformanceDiagnostics, SxPerformanceEngine};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 
 #[derive(Debug, Clone, Serialize)]
@@ -97,7 +98,11 @@ pub struct EngineState {
     pub sxlighting: Arc<SxLightingEngine>,
     pub sxperformance: Arc<SxPerformanceEngine>,
     pub watched_device_id: RwLock<String>,
+    pub watched_mouse_id: RwLock<String>,
     pub app_handle_cell: Arc<OnceLock<AppHandle>>,
+    pub sound_only_flag: Arc<AtomicBool>,
+    pub allow_exit: Arc<AtomicBool>,
+    pub recent_key_triggers: Mutex<VecDeque<(String, bool, Instant)>>,
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +113,32 @@ pub struct ProfileOverrideState {
 }
 
 impl EngineState {
+    /// Prevents double playback when both Windows WH_KEYBOARD_LL and focused DOM/sandbox
+    /// fallback fire for the same key event within 25 ms.
+    pub fn accept_key_trigger(&self, web_code: &str, is_down: bool) -> bool {
+        let now = Instant::now();
+        let Ok(mut recent) = self.recent_key_triggers.lock() else {
+            return true;
+        };
+        while let Some((_, _, ts)) = recent.front() {
+            if now.duration_since(*ts) > Duration::from_millis(80) {
+                recent.pop_front();
+            } else {
+                break;
+            }
+        }
+        if recent.iter().rev().any(|(code, down, ts)| {
+            *down == is_down && code == web_code && now.duration_since(*ts) < Duration::from_millis(25)
+        }) {
+            return false;
+        }
+        recent.push_back((web_code.to_string(), is_down, now));
+        if recent.len() > 24 {
+            recent.pop_front();
+        }
+        true
+    }
+
     pub fn play_key_event(&self, web_code: &str, is_down: bool) {
         let cfg = self.settings.read().map(|g| g.clone()).unwrap_or_default();
         if !cfg.enabled {
@@ -134,9 +165,11 @@ impl EngineState {
                 0.0
             };
             self.audio.play_clip(&clip, vol, cfg.pitch_variation, pan);
-            let band_idx = ((pan + 0.5).clamp(0.0, 0.99) * 8.0) as usize;
-            let intensity = if is_down { vol.clamp(0.25, 1.0) } else { (vol * 0.45).clamp(0.1, 0.7) };
-            self.sxlighting.notify_audio_trigger(intensity, band_idx);
+            if !cfg.sound_only_mode {
+                let band_idx = ((pan + 0.5).clamp(0.0, 0.99) * 8.0) as usize;
+                let intensity = if is_down { vol.clamp(0.25, 1.0) } else { (vol * 0.45).clamp(0.1, 0.7) };
+                self.sxlighting.notify_audio_trigger(intensity, band_idx);
+            }
         }
     }
 
@@ -419,6 +452,17 @@ fn update_settings(
     }
 
     state.audio.update_dsp(DspParams::from_settings(&new_settings));
+    state
+        .sound_only_flag
+        .store(new_settings.sound_only_mode, Ordering::Relaxed);
+
+    if new_settings.sound_only_mode && !old_cfg.sound_only_mode {
+        // Put RGB streaming & peripheral HID handles to sleep while staying in Sound-Only mode.
+        state.sxlighting.stop();
+        if let Ok(mut cache) = state.driver_cache.write() {
+            cache.clear();
+        }
+    }
 
     save_settings(&new_settings)?;
     if let Ok(mut g) = state.settings.write() {
@@ -438,6 +482,9 @@ fn trigger_test_key(
     is_down: bool,
     state: State<'_, Arc<EngineState>>,
 ) -> Result<u64, String> {
+    if !state.accept_key_trigger(&web_code, is_down) {
+        return Ok(state.stats.snapshot().total_keystrokes);
+    }
     let total = if is_down {
         state.stats.record_key(&web_code)
     } else {
@@ -772,9 +819,18 @@ async fn discover_hardware_devices(
     if let Ok(mut cache) = state.driver_cache.write() {
         cache.clear();
     }
-    tauri::async_runtime::spawn_blocking(discover_all_devices)
+    let devs = tauri::async_runtime::spawn_blocking(discover_all_devices)
         .await
-        .map_err(|e| format!("Hardware discovery error: {e}"))
+        .map_err(|e| format!("Hardware discovery error: {e}"))?;
+    if let Some(mouse) = devs
+        .iter()
+        .find(|d| d.device_kind == drivers::DeviceKind::Mouse && d.online && d.permission_ok && d.capabilities.communication_supported)
+    {
+        if let Ok(mut wm) = state.watched_mouse_id.write() {
+            *wm = mouse.id.clone();
+        }
+    }
+    Ok(devs)
 }
 
 #[tauri::command]
@@ -1363,11 +1419,24 @@ fn trigger_sxperformance_bypass(
     Ok((saved, state.sxperformance.get_diagnostics()))
 }
 
+fn has_visible_window(app: &AppHandle) -> bool {
+    app.get_webview_window("main")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false)
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.unminimize();
         let _ = win.show();
         let _ = win.set_focus();
+        return;
+    }
+    if let Some(cfg) = app.config().app.windows.first() {
+        if let Ok(win) = WebviewWindowBuilder::from_config(app, cfg).and_then(|b| b.build()) {
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
     }
 }
 
@@ -1379,13 +1448,19 @@ fn spawn_profile_watcher(engine: Arc<EngineState>, app: AppHandle) {
             loop {
                 std::thread::sleep(Duration::from_millis(1200));
 
+                let cfg = engine.settings.read().map(|g| g.clone()).unwrap_or_default();
+                if cfg.sound_only_mode || (!cfg.profiles_enabled && !has_visible_window(&app)) {
+                    continue;
+                }
+
                 let current_win = get_active_window();
                 if current_win != last_window {
                     last_window = current_win.clone();
-                    let _ = app.emit("sxmcaps://active-window", &current_win);
+                    if has_visible_window(&app) {
+                        let _ = app.emit("sxmcaps://active-window", &current_win);
+                    }
                 }
 
-                let cfg = engine.settings.read().map(|g| g.clone()).unwrap_or_default();
                 if !cfg.profiles_enabled {
                     continue;
                 }
@@ -1475,12 +1550,16 @@ fn spawn_hardware_watcher(engine: Arc<EngineState>, app: AppHandle) {
         .spawn(move || {
             let mut last_device_id = String::new();
             let mut last_state_sig = String::new();
+            let mut last_mouse_sig = String::new();
             let mut tick = 0u64;
             loop {
                 std::thread::sleep(Duration::from_millis(650));
                 tick = tick.wrapping_add(1);
 
-                if engine.sxlighting.is_streaming() {
+                if engine.sound_only_flag.load(Ordering::Relaxed)
+                    || !has_visible_window(&app)
+                    || engine.sxlighting.is_streaming()
+                {
                     continue;
                 }
 
@@ -1489,16 +1568,51 @@ fn spawn_hardware_watcher(engine: Arc<EngineState>, app: AppHandle) {
                     .read()
                     .map(|g| g.clone())
                     .unwrap_or_default();
+                let mut watched_mouse_id = engine
+                    .watched_mouse_id
+                    .read()
+                    .map(|g| g.clone())
+                    .unwrap_or_default();
 
-                if watched_id.is_empty() && tick % 4 == 1 {
+                if (watched_id.is_empty() || watched_mouse_id.is_empty()) && tick % 8 == 1 {
                     let devs = discover_all_devices();
-                    if let Some(d) = devs
-                        .into_iter()
-                        .find(|d| d.online && d.capabilities.communication_supported)
-                    {
-                        watched_id = d.id.clone();
-                        if let Ok(mut w) = engine.watched_device_id.write() {
-                            *w = watched_id.clone();
+                    if watched_id.is_empty() {
+                        if let Some(d) = devs
+                            .iter()
+                            .find(|d| d.online && d.capabilities.communication_supported)
+                        {
+                            watched_id = d.id.clone();
+                            if let Ok(mut w) = engine.watched_device_id.write() {
+                                *w = watched_id.clone();
+                            }
+                        }
+                    }
+                    if watched_mouse_id.is_empty() {
+                        if let Some(m) = devs.iter().find(|d| {
+                            d.device_kind == drivers::DeviceKind::Mouse
+                                && d.online
+                                && d.permission_ok
+                                && d.capabilities.communication_supported
+                        }) {
+                            watched_mouse_id = m.id.clone();
+                            if let Ok(mut wm) = engine.watched_mouse_id.write() {
+                                *wm = watched_mouse_id.clone();
+                            }
+                        }
+                    }
+                }
+
+                if !watched_mouse_id.is_empty() && watched_mouse_id != watched_id {
+                    if let Ok(mdrv) = engine.get_or_open_driver(&watched_mouse_id) {
+                        let minfo = mdrv.device_info();
+                        if minfo.online && minfo.permission_ok {
+                            if let Ok(Some(mouse_state)) = mdrv.poll_live_mouse_state() {
+                                let sig = serde_json::to_string(&mouse_state).unwrap_or_default();
+                                if sig != last_mouse_sig {
+                                    last_mouse_sig = sig;
+                                    let _ = app.emit("sxmcaps://mouse-state", mouse_state);
+                                }
+                            }
                         }
                     }
                 }
@@ -1524,8 +1638,8 @@ fn spawn_hardware_watcher(engine: Arc<EngineState>, app: AppHandle) {
                 if info.device_kind == drivers::DeviceKind::Mouse {
                     if let Ok(Some(mouse_state)) = drv.poll_live_mouse_state() {
                         let sig = serde_json::to_string(&mouse_state).unwrap_or_default();
-                        if sig != last_state_sig {
-                            last_state_sig = sig;
+                        if sig != last_mouse_sig {
+                            last_mouse_sig = sig;
                             let _ = app.emit("sxmcaps://mouse-state", mouse_state);
                         }
                     }
@@ -1558,21 +1672,35 @@ pub fn run() {
 
     let workspace = load_workspace_store();
     let app_handle_cell: Arc<OnceLock<AppHandle>> = Arc::new(OnceLock::new());
+    let sound_only_flag = Arc::new(AtomicBool::new(initial_settings.sound_only_mode));
+    let allow_exit = Arc::new(AtomicBool::new(false));
 
     let app_cell_light = Arc::clone(&app_handle_cell);
+    let sound_only_light = Arc::clone(&sound_only_flag);
     let sxlighting = Arc::new(SxLightingEngine::start(move |frame| {
+        if sound_only_light.load(Ordering::Relaxed) {
+            return;
+        }
         if let Some(app) = app_cell_light.get() {
-            let _ = app.emit("sxmcaps://lighting-frame", frame);
+            if has_visible_window(app) {
+                let _ = app.emit("sxmcaps://lighting-frame", frame);
+            }
         }
     }));
 
     let app_cell_perf = Arc::clone(&app_handle_cell);
+    let sound_only_perf = Arc::clone(&sound_only_flag);
     let sxperformance = Arc::new(SxPerformanceEngine::start(move |web_code, is_down| {
+        if sound_only_perf.load(Ordering::Relaxed) {
+            return;
+        }
         if let Some(app) = app_cell_perf.get() {
-            let _ = app.emit(
-                "sxmcaps://performance-transformed",
-                serde_json::json!({ "web_code": web_code, "is_down": is_down }),
-            );
+            if has_visible_window(app) {
+                let _ = app.emit(
+                    "sxmcaps://performance-transformed",
+                    serde_json::json!({ "web_code": web_code, "is_down": is_down }),
+                );
+            }
         }
     }));
 
@@ -1590,12 +1718,16 @@ pub fn run() {
         sxlighting,
         sxperformance,
         watched_device_id: RwLock::new(String::new()),
+        watched_mouse_id: RwLock::new(String::new()),
         app_handle_cell,
+        sound_only_flag,
+        allow_exit,
+        recent_key_triggers: Mutex::new(VecDeque::with_capacity(16)),
     });
 
     let engine_setup = Arc::clone(&engine);
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(engine)
         .setup(move |app| {
@@ -1612,22 +1744,30 @@ pub fn run() {
 
             let listener = start_global_listener(move |ev| match ev {
                 GlobalInputEvent::Key { web_code, is_down } => {
+                    if !engine_ev.accept_key_trigger(web_code, is_down) {
+                        return;
+                    }
                     engine_ev.play_key_event(web_code, is_down);
-                    engine_ev.sxlighting.notify_key_event(web_code, is_down);
+                    let eco = engine_ev.sound_only_flag.load(Ordering::Relaxed);
+                    if !eco {
+                        engine_ev.sxlighting.notify_key_event(web_code, is_down);
+                    }
                     let total = if is_down {
                         engine_ev.stats.record_key(web_code)
                     } else {
                         engine_ev.stats.snapshot().total_keystrokes
                     };
-                    let _ = app_handle.emit(
-                        "sxmcaps://input-event",
-                        UiInputEvent {
-                            web_code: web_code.to_string(),
-                            is_down,
-                            is_mouse: false,
-                            total_keystrokes: total,
-                        },
-                    );
+                    if !eco && has_visible_window(&app_handle) {
+                        let _ = app_handle.emit(
+                            "sxmcaps://input-event",
+                            UiInputEvent {
+                                web_code: web_code.to_string(),
+                                is_down,
+                                is_mouse: false,
+                                total_keystrokes: total,
+                            },
+                        );
+                    }
                 }
                 GlobalInputEvent::Mouse { button, is_down } => {
                     let web_code = button.as_web_code();
@@ -1635,16 +1775,18 @@ pub fn run() {
                     if is_down {
                         engine_ev.stats.record_mouse();
                     }
-                    let total = engine_ev.stats.snapshot().total_keystrokes;
-                    let _ = app_handle.emit(
-                        "sxmcaps://input-event",
-                        UiInputEvent {
-                            web_code: web_code.to_string(),
-                            is_down,
-                            is_mouse: true,
-                            total_keystrokes: total,
-                        },
-                    );
+                    if !engine_ev.sound_only_flag.load(Ordering::Relaxed) && has_visible_window(&app_handle) {
+                        let total = engine_ev.stats.snapshot().total_keystrokes;
+                        let _ = app_handle.emit(
+                            "sxmcaps://input-event",
+                            UiInputEvent {
+                                web_code: web_code.to_string(),
+                                is_down,
+                                is_mouse: true,
+                                total_keystrokes: total,
+                            },
+                        );
+                    }
                 }
             });
 
@@ -1681,6 +1823,7 @@ pub fn run() {
                         let _ = app.emit("sxmcaps://settings-updated", cfg);
                     }
                     "quit" => {
+                        engine_tray.allow_exit.store(true, Ordering::Relaxed);
                         let _ = engine_tray.stats.save_now();
                         app.exit(0);
                     }
@@ -1708,14 +1851,21 @@ pub fn run() {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<Arc<EngineState>>();
                 let _ = state.stats.save_now();
-                let minimize = state
+                let (minimize, hibernate) = state
                     .settings
                     .read()
-                    .map(|g| g.minimize_to_tray)
-                    .unwrap_or(true);
+                    .map(|g| (g.minimize_to_tray, g.hibernate_on_tray))
+                    .unwrap_or((true, true));
                 if minimize {
                     api.prevent_close();
-                    let _ = window.hide();
+                    if hibernate {
+                        // Destroy WebView on close-to-tray to free WebView2 / WebKitGTK RAM (~150-300 MB).
+                        let _ = window.destroy();
+                    } else {
+                        let _ = window.hide();
+                    }
+                } else {
+                    state.allow_exit.store(true, Ordering::Relaxed);
                 }
             }
         })
@@ -1779,6 +1929,22 @@ pub fn run() {
             apply_mouse_hardware_settings,
             factory_reset_mouse_hardware,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running sxmcaps");
+        .build(tauri::generate_context!())
+        .expect("error while building sxmcaps");
+
+    app.run(|app_handle, event| {
+        if let RunEvent::ExitRequested { api, .. } = event {
+            let state = app_handle.state::<Arc<EngineState>>();
+            if !state.allow_exit.load(Ordering::Relaxed)
+                && state
+                    .settings
+                    .read()
+                    .map(|g| g.minimize_to_tray && g.hibernate_on_tray)
+                    .unwrap_or(false)
+            {
+                // Keep background sound engine & tray running after the WebView window is destroyed.
+                api.prevent_exit();
+            }
+        }
+    });
 }

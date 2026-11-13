@@ -12,7 +12,8 @@ const DELAY_BUF_LEN: usize = 8192;
 
 #[derive(Debug, Clone)]
 pub struct AudioClip {
-    pub samples: Vec<f32>,
+    /// Stored as mono 16-bit PCM in a shrink-fitted shared slice to halve soundpack RAM vs f32.
+    pub samples: Arc<[i16]>,
     pub sample_rate: u32,
 }
 
@@ -54,18 +55,24 @@ impl AudioClip {
             return Err(format!("Boş ses dosyası: {}", path.display()));
         }
 
-        let frames = raw.len() / channels;
-        let mut mono = Vec::with_capacity(frames);
-        for chunk in raw.chunks_exact(channels) {
-            let mut sum = 0.0f32;
-            for &s in chunk {
-                sum += s as f32 / 32768.0;
+        let samples: Arc<[i16]> = if channels == 1 {
+            Arc::from(raw)
+        } else {
+            let frames = raw.len() / channels;
+            let mut mono = Vec::with_capacity(frames);
+            let ch_i32 = channels as i32;
+            for chunk in raw.chunks_exact(channels) {
+                let mut sum = 0i32;
+                for &s in chunk {
+                    sum += s as i32;
+                }
+                mono.push((sum / ch_i32) as i16);
             }
-            mono.push(sum / channels as f32);
-        }
+            Arc::from(mono)
+        };
 
         Ok(Self {
-            samples: mono,
+            samples,
             sample_rate,
         })
     }
@@ -85,7 +92,7 @@ impl AudioClip {
 
         if start_idx >= self.samples.len() || len_samples == 0 {
             return Self {
-                samples: vec![0.0; 64],
+                samples: Arc::from(vec![0i16; 64]),
                 sample_rate: self.sample_rate,
             };
         }
@@ -95,16 +102,17 @@ impl AudioClip {
 
         let fade_in = ((self.sample_rate as usize) / 800).min(sliced.len() / 4);
         for (i, sample) in sliced.iter_mut().take(fade_in).enumerate() {
-            *sample *= (i as f32) / (fade_in.max(1) as f32);
+            *sample = ((*sample as f32) * (i as f32) / (fade_in.max(1) as f32)).round() as i16;
         }
         let fade_out = ((self.sample_rate as usize) / 250).min(sliced.len() / 3);
         let len = sliced.len();
         for i in 0..fade_out {
-            sliced[len - 1 - i] *= (i as f32) / (fade_out.max(1) as f32);
+            let idx = len - 1 - i;
+            sliced[idx] = ((sliced[idx] as f32) * (i as f32) / (fade_out.max(1) as f32)).round() as i16;
         }
 
         Self {
-            samples: sliced,
+            samples: Arc::from(sliced),
             sample_rate: self.sample_rate,
         }
     }
@@ -628,10 +636,11 @@ fn mix_next_frame(shared: &mut MixerShared) -> (f32, f32) {
         let samples = &voice.clip.samples;
         let pos_i = voice.pos as usize;
 
+        const INV_I16: f32 = 1.0 / 32768.0;
         if pos_i + 1 < samples.len() {
             let frac = (voice.pos - pos_i as f64) as f32;
-            let s0 = samples[pos_i];
-            let s1 = samples[pos_i + 1];
+            let s0 = samples[pos_i] as f32 * INV_I16;
+            let s1 = samples[pos_i + 1] as f32 * INV_I16;
             let sample = s0 + (s1 - s0) * frac;
 
             left += sample * voice.gain_l;
@@ -639,7 +648,7 @@ fn mix_next_frame(shared: &mut MixerShared) -> (f32, f32) {
             voice.pos += voice.step;
             idx += 1;
         } else if pos_i < samples.len() {
-            let sample = samples[pos_i];
+            let sample = samples[pos_i] as f32 * INV_I16;
             left += sample * voice.gain_l;
             right += sample * voice.gain_r;
             voice.pos += voice.step;

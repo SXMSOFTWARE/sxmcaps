@@ -31,6 +31,8 @@ export interface AppSettings {
   app_profiles: AppProfileRule[];
   autostart: boolean;
   language: string;
+  sound_only_mode: boolean;
+  hibernate_on_tray: boolean;
 }
 
 export interface SoundpackInfo {

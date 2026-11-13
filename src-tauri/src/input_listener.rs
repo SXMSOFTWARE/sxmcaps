@@ -387,7 +387,7 @@ mod platform {
     use std::collections::HashSet;
     use std::ffi::c_void;
     use std::ptr;
-    use std::sync::{Arc, Mutex, OnceLock};
+    use std::sync::{mpsc, Arc, Mutex, OnceLock};
 
     type HHOOK = *mut c_void;
     type HINSTANCE = *mut c_void;
@@ -466,10 +466,18 @@ mod platform {
     #[link(name = "kernel32")]
     extern "system" {
         fn GetCurrentThreadId() -> u32;
+        fn GetModuleHandleW(lp_module_name: *const u16) -> HINSTANCE;
     }
 
-    static CALLBACK: OnceLock<Arc<dyn Fn(GlobalInputEvent) + Send + Sync>> = OnceLock::new();
-    static PRESSED_VK: OnceLock<Mutex<HashSet<u32>>> = OnceLock::new();
+    #[derive(Clone, Copy)]
+    enum WinRawEvent {
+        Key { vk_code: u32, is_down: bool },
+        Mouse { button: MouseButtonKind, is_down: bool },
+    }
+
+    // Lock-free channel inside hook callbacks so CallNextHookEx always returns in <1us
+    // and never triggers Windows LowLevelHooksTimeout when WebView2 is focused.
+    static EVENT_TX: OnceLock<mpsc::SyncSender<WinRawEvent>> = OnceLock::new();
 
     unsafe extern "system" fn keyboard_proc(
         code: i32,
@@ -482,24 +490,11 @@ mod platform {
             let is_up = wparam == WM_KEYUP || wparam == WM_SYSKEYUP;
 
             if is_down || is_up {
-                let mut should_emit = true;
-                if let Some(pressed) = PRESSED_VK.get() {
-                    if let Ok(mut guard) = pressed.lock() {
-                        if is_down {
-                            // Ignore Windows key auto-repeat while held
-                            if !guard.insert(kb.vk_code) {
-                                should_emit = false;
-                            }
-                        } else {
-                            guard.remove(&kb.vk_code);
-                        }
-                    }
-                }
-                if should_emit {
-                    if let Some(cb) = CALLBACK.get() {
-                        let web_code = vk_to_web_code(kb.vk_code);
-                        cb(GlobalInputEvent::Key { web_code, is_down });
-                    }
+                if let Some(tx) = EVENT_TX.get() {
+                    let _ = tx.try_send(WinRawEvent::Key {
+                        vk_code: kb.vk_code,
+                        is_down,
+                    });
                 }
             }
         }
@@ -538,8 +533,8 @@ mod platform {
             };
 
             if let Some((button, is_down)) = ev {
-                if let Some(cb) = CALLBACK.get() {
-                    cb(GlobalInputEvent::Mouse { button, is_down });
+                if let Some(tx) = EVENT_TX.get() {
+                    let _ = tx.try_send(WinRawEvent::Mouse { button, is_down });
                 }
             }
         }
@@ -575,8 +570,34 @@ mod platform {
     where
         F: Fn(GlobalInputEvent) + Send + Sync + 'static,
     {
-        let _ = CALLBACK.set(Arc::new(on_event));
-        let _ = PRESSED_VK.set(Mutex::new(HashSet::new()));
+        let (tx, rx) = mpsc::sync_channel::<WinRawEvent>(512);
+        let _ = EVENT_TX.set(tx);
+        let cb = Arc::new(on_event);
+
+        std::thread::Builder::new()
+            .name("sxmcaps-win32-dispatch".to_string())
+            .spawn(move || {
+                let mut pressed_vk: HashSet<u32> = HashSet::with_capacity(16);
+                while let Ok(ev) = rx.recv() {
+                    match ev {
+                        WinRawEvent::Key { vk_code, is_down } => {
+                            if is_down {
+                                if !pressed_vk.insert(vk_code) {
+                                    continue;
+                                }
+                            } else {
+                                pressed_vk.remove(&vk_code);
+                            }
+                            let web_code = vk_to_web_code(vk_code);
+                            cb(GlobalInputEvent::Key { web_code, is_down });
+                        }
+                        WinRawEvent::Mouse { button, is_down } => {
+                            cb(GlobalInputEvent::Mouse { button, is_down });
+                        }
+                    }
+                }
+            })
+            .expect("win32 dispatch thread spawn failed");
 
         let status = Arc::new(Mutex::new(InputStatus {
             has_permission: true,
@@ -596,8 +617,9 @@ mod platform {
                     *g = Some(tid);
                 }
 
-                let kb_hook = SetWindowsHookExW(WH_KEYBOARD_LL, keyboard_proc, ptr::null_mut(), 0);
-                let ms_hook = SetWindowsHookExW(WH_MOUSE_LL, mouse_proc, ptr::null_mut(), 0);
+                let hmod = GetModuleHandleW(ptr::null());
+                let kb_hook = SetWindowsHookExW(WH_KEYBOARD_LL, keyboard_proc, hmod, 0);
+                let ms_hook = SetWindowsHookExW(WH_MOUSE_LL, mouse_proc, hmod, 0);
 
                 let mut msg = MSG {
                     hwnd: ptr::null_mut(),

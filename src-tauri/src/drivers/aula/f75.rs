@@ -917,9 +917,9 @@ impl AulaF75Driver {
         })
     }
 
-    fn with_stream_hid<F>(&self, f: F) -> Result<(), String>
+    fn with_persistent_hid<F, R>(&self, f: F) -> Result<R, String>
     where
-        F: Fn(&HidDevice) -> Result<(), String>,
+        F: Fn(&HidDevice) -> Result<R, String>,
     {
         let mut guard = self
             .stream_dev
@@ -930,7 +930,7 @@ impl AulaF75Driver {
         }
         if let Some(ref dev) = *guard {
             match f(dev) {
-                Ok(()) => return Ok(()),
+                Ok(v) => return Ok(v),
                 Err(_) => {
                     *guard = None;
                 }
@@ -942,6 +942,13 @@ impl AulaF75Driver {
             *guard = Some(fresh);
         }
         res
+    }
+
+    fn with_stream_hid<F>(&self, f: F) -> Result<(), String>
+    where
+        F: Fn(&HidDevice) -> Result<(), String>,
+    {
+        self.with_persistent_hid(f)
     }
 
     fn open_hid(&self) -> Result<HidDevice, String> {
@@ -977,52 +984,54 @@ impl AulaF75Driver {
     }
 
     fn wired_read(&self, cmd: u8, sub: u8, len: usize) -> Result<Vec<u8>, String> {
-        let dev = self.open_hid()?;
-        let mut out = Vec::with_capacity(len);
-        let rc = cmd | self.cmds.read_flag;
-        for pk in build_wired_packets(rc, sub, len, None) {
-            let size = (pk[6] as usize) | ((pk[7] as usize) << 8);
-            thread::sleep(Duration::from_millis(20));
-            Self::wired_send(&dev, &pk)?;
-            thread::sleep(Duration::from_millis(20));
-            let mut buf = [0u8; WD_PACKET_LEN];
-            buf[0] = WD_REPORT_ID;
-            let n = dev
-                .get_feature_report(&mut buf)
-                .map_err(|e| format!("Wired HID get_feature_report failed: {e}"))?;
-            if n < 8 + size {
-                return Err(format!("Short wired HID reply ({n} < {})", 8 + size));
+        self.with_persistent_hid(|dev| {
+            let mut out = Vec::with_capacity(len);
+            let rc = cmd | self.cmds.read_flag;
+            for pk in build_wired_packets(rc, sub, len, None) {
+                let size = (pk[6] as usize) | ((pk[7] as usize) << 8);
+                thread::sleep(Duration::from_millis(20));
+                Self::wired_send(dev, &pk)?;
+                thread::sleep(Duration::from_millis(20));
+                let mut buf = [0u8; WD_PACKET_LEN];
+                buf[0] = WD_REPORT_ID;
+                let n = dev
+                    .get_feature_report(&mut buf)
+                    .map_err(|e| format!("Wired HID get_feature_report failed: {e}"))?;
+                if n < 8 + size {
+                    return Err(format!("Short wired HID reply ({n} < {})", 8 + size));
+                }
+                out.extend_from_slice(&buf[8..8 + size]);
             }
-            out.extend_from_slice(&buf[8..8 + size]);
-        }
-        Ok(out)
+            Ok(out)
+        })
     }
 
     fn wired_write(&self, cmd: u8, sub: u8, data: &[u8], delay_ms: u64) -> Result<(), String> {
-        let dev = self.open_hid()?;
-        for pk in build_wired_packets(cmd, sub, data.len(), Some(data)) {
-            if delay_ms > 0 {
-                thread::sleep(Duration::from_millis(delay_ms));
+        self.with_persistent_hid(|dev| {
+            for pk in build_wired_packets(cmd, sub, data.len(), Some(data)) {
+                if delay_ms > 0 {
+                    thread::sleep(Duration::from_millis(delay_ms));
+                }
+                Self::wired_send(dev, &pk)?;
             }
-            Self::wired_send(&dev, &pk)?;
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     fn wireless_read(&self, cmd: u8, sub: u8, len: usize) -> Result<Vec<u8>, String> {
-        let dev = self.open_hid()?;
-        let rc = cmd | self.cmds.read_flag;
-        let mut out = vec![0u8; len.max(WL_CHUNK)];
-        let mut got: Vec<bool> = Vec::new();
-        let mut total = 0usize;
+        self.with_persistent_hid(|dev| {
+            let rc = cmd | self.cmds.read_flag;
+            let mut out = vec![0u8; len.max(WL_CHUNK)];
+            let mut got: Vec<bool> = Vec::new();
+            let mut total = 0usize;
 
-        for attempt in 0..4 {
-            if attempt > 0 {
-                thread::sleep(Duration::from_millis(60));
-            }
-            let req = build_wl_read_packet(rc, sub);
-            dev.write(&req)
-                .map_err(|e| format!("2.4G HID write failed: {e}"))?;
+            for attempt in 0..4 {
+                if attempt > 0 {
+                    thread::sleep(Duration::from_millis(60));
+                }
+                let req = build_wl_read_packet(rc, sub);
+                dev.write(&req)
+                    .map_err(|e| format!("2.4G HID write failed: {e}"))?;
 
             let deadline = Instant::now() + Duration::from_millis(550);
             let mut buf = [0u8; 64];
@@ -1062,41 +1071,43 @@ impl AulaF75Driver {
             }
         }
         Err("No complete reply from AULA F75 2.4G receiver (keyboard asleep or switched to USB/BT?)".to_string())
+        })
     }
 
     fn wireless_write(&self, cmd: u8, sub: u8, data: &[u8], delay_ms: u64) -> Result<(), String> {
-        let dev = self.open_hid()?;
-        let wants_ack = (cmd & 0x80) == 0;
-        for (i, pk) in build_wl_write_packets(cmd, sub, data).iter().enumerate() {
-            let mut ok = false;
-            for _tries in 0..5 {
-                thread::sleep(Duration::from_millis(delay_ms));
-                dev.write(pk)
-                    .map_err(|e| format!("2.4G HID write failed: {e}"))?;
-                if !wants_ack {
-                    ok = true;
-                    break;
-                }
-                let mut buf = [0u8; 64];
-                for _ in 0..16 {
-                    let n = dev.read_timeout(&mut buf, 250).map_err(|e| e.to_string())?;
-                    if n >= WL_PACKET_LEN && buf[0] == WL_REPORT_ID && buf[1] == cmd {
-                        let err_bit = (buf[2] & 0x80) != 0;
-                        if !err_bit && (buf[3] as usize) == i {
-                            ok = true;
+        self.with_persistent_hid(|dev| {
+            let wants_ack = (cmd & 0x80) == 0;
+            for (i, pk) in build_wl_write_packets(cmd, sub, data).iter().enumerate() {
+                let mut ok = false;
+                for _tries in 0..5 {
+                    thread::sleep(Duration::from_millis(delay_ms));
+                    dev.write(pk)
+                        .map_err(|e| format!("2.4G HID write failed: {e}"))?;
+                    if !wants_ack {
+                        ok = true;
+                        break;
+                    }
+                    let mut buf = [0u8; 64];
+                    for _ in 0..16 {
+                        let n = dev.read_timeout(&mut buf, 250).map_err(|e| e.to_string())?;
+                        if n >= WL_PACKET_LEN && buf[0] == WL_REPORT_ID && buf[1] == cmd {
+                            let err_bit = (buf[2] & 0x80) != 0;
+                            if !err_bit && (buf[3] as usize) == i {
+                                ok = true;
+                            }
+                            break;
                         }
+                    }
+                    if ok {
                         break;
                     }
                 }
-                if ok {
-                    break;
+                if !ok {
+                    return Err(format!("No 2.4G acknowledgement for command 0x{cmd:02x} packet {i}"));
                 }
             }
-            if !ok {
-                return Err(format!("No 2.4G acknowledgement for command 0x{cmd:02x} packet {i}"));
-            }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     fn ensure_writable(&self) -> Result<(), String> {
